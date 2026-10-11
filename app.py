@@ -56,8 +56,8 @@ st.divider()
 # ----------------------------------------------------
 st.subheader("📷 Σάρωση / Καταχώρηση Προϊόντος")
 
-# Κουμπί ενεργοποίησης κάμερας σαρωτή
-scanned_code = qrcode_scanner(key='barcode_scanner', box_color="#ff4b4b")
+# Κουμπί ενεργοποίησης κάμερας σαρωτή (διορθωμένο)
+scanned_code = qrcode_scanner(key='barcode_scanner')
 
 # Εναλλακτικά πεδίο χειροκίνητης πληκτρολόγησης αν δεν γίνει σάρωση
 if not scanned_code:
