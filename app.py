@@ -270,12 +270,19 @@ with tab1:
             else:
                 badge = "⏳ OK"
                 
-            # Εμφάνιση σε πολυτελή κάρτα
+            # Εμφάνιση σε πολυτελή κάρτα με μεγάλες, έντονες ημερομηνίες
             with st.container():
                 col1, col2, col3 = st.columns([3, 2, 1])
                 with col1:
-                    st.markdown(f"**{row['Προϊόν']}**")
-                    st.caption(f"🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')} | ⏰ Απόσυρση: {w_date_str}")
+                    st.markdown(f"<span style='font-size: 16px; font-weight: 800; color: #0f172a;'>{row['Προϊόν']}</span>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='margin-top: 6px;'>"
+                        f"<span style='color: #0284c7; font-size: 14px; font-weight: bold;'>🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')}</span>"
+                        f" &nbsp;|&nbsp; "
+                        f"<span style='color: #dc2626; font-size: 14px; font-weight: 800;'>⏰ Απόσυρση: {w_date_str}</span>"
+                        f"</div>", 
+                        unsafe_allow_html=True
+                    )
                 with col2:
                     st.markdown(f"<span style='font-size: 12px; font-weight: 700; background: #f1f5f9; padding: 6px 10px; border-radius: 8px;'>{badge}</span>", unsafe_allow_html=True)
                 with col3:
