@@ -38,7 +38,7 @@ c.execute('''
 conn.commit()
 
 # ----------------------------------------------------
-# 2. ΕΝΤΥΠΩΣΙΑΚo UI & DARK THEME CSS (ΠΛΗΡΗΣ ΔΙΟΡΘΩΣΗ)
+# 2. UI & REFINED BACKGROUND CSS
 # ----------------------------------------------------
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
@@ -49,33 +49,18 @@ st.markdown("""
 footer {visibility: hidden;}
 header {visibility: hidden;}
 
-/* Σκοτεινό, μοντέρνο φόντο εφαρμογής */
+/* Όμορφο, καθαρό και απαλό φόντο */
 .stApp {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-    color: #f8fafc;
+    background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
 }
 
-/* Κάρτες / Containers: Σκούρο φόντο */
+/* Κάρτες / Containers: Λευκό φόντο με απαλή σκιά */
 div[data-testid="stVerticalBlock"] > div[style*="border"] {
-    background: #1e293b !important;
+    background: #ffffff !important;
     border-radius: 16px !important;
     padding: 20px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-    border: 1px solid #334155 !important;
-}
-
-/* --- ΔΙΟΡΘΩΣΗ ΓΙΑ ΟΛΑ ΤΑ INPUTS / TEXT BOXES / SELECTBOXES --- */
-input, textarea {
-    background-color: #334155 !important;
-    color: #f8fafc !important;
-    border: 1px solid #475569 !important;
-    border-radius: 8px !important;
-}
-
-div[data-baseweb="select"] > div {
-    background-color: #334155 !important;
-    color: #f8fafc !important;
-    border: 1px solid #475569 !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(203, 213, 225, 0.6) !important;
 }
 
 /* Κουμπιά με έντονο χρώμα */
@@ -87,11 +72,11 @@ div[data-baseweb="select"] > div {
     color: white;
     border: none;
     transition: all 0.2s ease-in-out;
-    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
 }
 .stButton>button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(2, 132, 199, 0.5);
+    box-shadow: 0 6px 16px rgba(2, 132, 199, 0.4);
 }
 
 /* Custom Tabs Styling */
@@ -102,42 +87,30 @@ div[data-baseweb="select"] > div {
 .stTabs [data-baseweb="tab"] {
     border-radius: 12px 12px 0px 0px;
     padding: 12px 24px;
-    background-color: #1e293b;
-    color: #cbd5e1;
+    background-color: #ffffff;
+    color: #475569;
     font-weight: 700;
-    border: 1px solid #334155;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
 }
 .stTabs [aria-selected="true"] {
     background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
     color: #ffffff !important;
-    border: none !important;
 }
 
-/* Metric boxes custom look (Σκούρα) */
+/* Metric boxes custom look */
 div[data-testid="stMetric"] {
-    background-color: #1e293b;
+    background-color: #ffffff;
     padding: 15px;
     border-radius: 14px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    border: 1px solid #334155;
-}
-div[data-testid="stMetric"] label {
-    color: #94a3b8 !important;
-}
-div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-    color: #f8fafc !important;
-}
-
-/* Γενικά κείμενα, ετικέτες και checkboxes */
-p, span, label, .stSubheader, .stCheckbox {
-    color: #f8fafc !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    border: 1px solid rgba(203, 213, 225, 0.6);
 }
 </style>
 """, unsafe_allow_html=True)
 
-# 🧊 Τίτλος ShelfGuard πολύ μεγάλος και ψηλά
-st.markdown("<h1 style='text-align: center; color: #38bdf8; font-weight: 900; font-size: 38px; margin-top: -10px; margin-bottom: 0px;'>🧊 ShelfGuard</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #cbd5e1; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; margin-top: 5px; margin-bottom: 20px;'>ΣΥΣΤΗΜΑ ΑΣΦΑΛΟΥΣ ΕΛΕΓΧΟΥ ΗΜΕΡΟΜΗΝΙΩΝ ΚΑΙ ΑΠΟΣΥΡΣΕΩΝ</p>", unsafe_allow_html=True)
+# 🧊 Τίτλος ShelfGuard μεγάλος και ψηλά
+st.markdown("<h1 style='text-align: center; color: #0284c7; font-weight: 900; font-size: 38px; margin-top: -10px; margin-bottom: 0px;'>🧊 ShelfGuard</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #1e293b; font-size: 13px; font-weight: 800; letter-spacing: 0.5px; margin-top: 5px; margin-bottom: 20px;'>ΣΥΣΤΗΜΑ ΑΣΦΑΛΟΥΣ ΕΛΕΓΧΟΥ ΗΜΕΡΟΜΗΝΙΩΝ ΚΑΙ ΑΠΟΣΥΡΣΕΩΝ</p>", unsafe_allow_html=True)
 
 # Tabs πλοήγησης
 tab1, tab2 = st.tabs(["📷 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
@@ -292,32 +265,33 @@ with tab1:
             
             w_date_str = w_date.strftime("%d/%m/%Y")
             
+            # --- ΧΡΩΜΑΤΙΚΗ ΛΟΓΙΚΗ STATUS ---
             if status == 'Done':
                 badge = "✅ ΟΛΟΚΛΗΡΩΘΗΚΕ"
-                badge_bg = "#334155"
-                badge_color = "#94a3b8"
+                badge_bg = "#f1f5f9"
+                badge_color = "#64748b"
             elif w_date < today:
                 badge = "🔴 ΕΧΕΙ ΠΕΡΑΣΕΙ Η ΗΜΕΡΟΜΗΝΙΑ"
-                badge_bg = "#7f1d1d"
-                badge_color = "#fca5a5"
+                badge_bg = "#fee2e2"
+                badge_color = "#991b1b"
             elif w_date == today or w_date == today + timedelta(days=1):
                 badge = "🟠 ΑΠΟΣΥΡΣΗ ΣΗΜΕΡΑ/ΑΜΕΣΑ"
-                badge_bg = "#7c2d12"
-                badge_color = "#fdba74"
+                badge_bg = "#ffedd5"
+                badge_color = "#c2410c"
             else:
                 badge = "🟢 ΕΝΕΡΓΟ (OK)"
-                badge_bg = "#14532d"
-                badge_color = "#86efac"
+                badge_bg = "#dcfce7"
+                badge_color = "#166534"
                 
             with st.container():
                 col1, col2, col3 = st.columns([3, 2, 1])
                 with col1:
-                    st.markdown(f"<div style='font-size: 18px; font-weight: 800; color: #f8fafc; margin-bottom: 6px;'>{row['Προϊόν']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 6px;'>{row['Προϊόν']}</div>", unsafe_allow_html=True)
                     st.markdown(
                         f"<div style='line-height: 1.6;'>"
-                        f"<span style='background: #0369a1; color: #e0f2fe; padding: 3px 8px; border-radius: 6px; font-size: 15px; font-weight: 800;'>🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')}</span>"
+                        f"<span style='background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 6px; font-size: 15px; font-weight: 800;'>🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')}</span>"
                         f"<br>"
-                        f"<span style='background: #991b1b; color: #fee2e2; padding: 3px 8px; border-radius: 6px; font-size: 16px; font-weight: 900;'>⏰ Απόσυρση: {w_date_str}</span>"
+                        f"<span style='background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 6px; font-size: 16px; font-weight: 900;'>⏰ Απόσυρση: {w_date_str}</span>"
                         f"</div>", 
                         unsafe_allow_html=True
                     )
