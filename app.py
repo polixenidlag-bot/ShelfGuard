@@ -38,9 +38,18 @@ c.execute('''
 conn.commit()
 
 # ----------------------------------------------------
-# 2. ΔΙΑΜΟΡΦΩΣΗ ΣΕΛΙΔΑΣ STREAMLIT
+# 2. ΔΙΑΜΟΡΦΩΣΗ ΣΕΛΙΔΑΣ & ΚΡΥΨΙΜΟ MENU / HEADER
 # ----------------------------------------------------
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
+
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 st.title("🧊 ShelfGuard - Έλεγχος Αποσύρσεων")
 
