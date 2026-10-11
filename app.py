@@ -38,7 +38,7 @@ c.execute('''
 conn.commit()
 
 # ----------------------------------------------------
-# 2. ΕΝΤΥΠΩΣΙΑΚo UI & DARK THEME CSS
+# 2. ΕΝΤΥΠΩΣΙΑΚo UI & DARK THEME CSS (ΠΛΗΡΗΣ ΔΙΟΡΘΩΣΗ)
 # ----------------------------------------------------
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
@@ -55,13 +55,27 @@ header {visibility: hidden;}
     color: #f8fafc;
 }
 
-/* Κάρτες / Containers: Σκούρο φόντο αντί για λευκό */
+/* Κάρτες / Containers: Σκούρο φόντο */
 div[data-testid="stVerticalBlock"] > div[style*="border"] {
     background: #1e293b !important;
     border-radius: 16px !important;
     padding: 20px;
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
     border: 1px solid #334155 !important;
+}
+
+/* --- ΔΙΟΡΘΩΣΗ ΓΙΑ ΟΛΑ ΤΑ INPUTS / TEXT BOXES / SELECTBOXES --- */
+input, textarea {
+    background-color: #334155 !important;
+    color: #f8fafc !important;
+    border: 1px solid #475569 !important;
+    border-radius: 8px !important;
+}
+
+div[data-baseweb="select"] > div {
+    background-color: #334155 !important;
+    color: #f8fafc !important;
+    border: 1px solid #475569 !important;
 }
 
 /* Κουμπιά με έντονο χρώμα */
@@ -114,8 +128,8 @@ div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
     color: #f8fafc !important;
 }
 
-/* Γενικά κείμενα και ετικέτες */
-p, span, label, .stSubheader {
+/* Γενικά κείμενα, ετικέτες και checkboxes */
+p, span, label, .stSubheader, .stCheckbox {
     color: #f8fafc !important;
 }
 </style>
