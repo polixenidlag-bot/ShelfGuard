@@ -18,7 +18,6 @@ c.execute('''
     )
 ''')
 
-# Αυτόματη προσθήκη στήλης department αν δεν υπάρχει
 try:
     c.execute("ALTER TABLE products ADD COLUMN department TEXT")
     conn.commit()
@@ -48,7 +47,6 @@ st.title("🧊 ShelfGuard - Έλεγχος Αποσύρσεων")
 # Tabs πλοήγησης
 tab1, tab2, tab3 = st.tabs(["📷 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων", "📂 Μαζική Εισαγωγή Excel"])
 
-# Επιλογή Ψυγείου / Τμήματος (κοινή για σάρωση)
 DEPARTMENTS = [
     "Ψυγείο 1: Γάλατα-Χυμοί",
     "Ψυγείο 2: Γιαούρτια",
@@ -167,7 +165,7 @@ with tab2:
             st.dataframe(df_products, use_container_width=True)
             st.caption(f"Συνολικά προϊόντα στη βάση: {len(df_products)}")
         else:
-            st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα. Μπορείτε να ανεβάσετε το αρχείο σας στο tab 'Μαζική Εισαγωγή Excel'.")
+            st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα. Ανεβάστε το αρχείο σας στο tab 'Μαζική Εισαγωγή Excel'.")
     except Exception as e:
         st.error(f"Σφάλμα ανάγνωσης λίστας: {e}")
 
@@ -177,7 +175,7 @@ with tab2:
 with tab3:
     st.subheader("📂 Μαζική Εισαγωγή από Excel / CSV")
     st.markdown("""
-    Ανεβάστε το αρχείο σας (όπως το έχετε στο Google Sheets με στήλες **Barcode**, **Όνομα Προϊόντος**, **Ημέρες Κανόνα** και **Τμήμα**) για να περαστούν όλα αυτόματα!
+    Ανεβάστε το αρχείο σας (.xlsx) για να περαστούν όλα τα προϊόντα αυτόματα!
     """)
     
     uploaded_file = st.file_uploader("Επιλέξτε αρχείο Excel (.xlsx) ή CSV", type=["xlsx", "csv"])
@@ -187,7 +185,7 @@ with tab3:
             if uploaded_file.name.endswith('.csv'):
                 df_import = pd.read_csv(uploaded_file)
             else:
-                df_import = pd.read_excel(uploaded_file)
+                df_import = pd.read_excel(uploaded_file, engine='openpyxl')
             
             st.success("Το αρχείο διαβάστηκε επιτυχώς! Προεπισκόπηση:")
             st.dataframe(df_import.head(), use_container_width=True)
@@ -195,23 +193,30 @@ with tab3:
             if st.button("🚀 Οριστική Εισαγωγή Προϊόντων στη Βάση"):
                 imported_count = 0
                 for _, row in df_import.iterrows():
-                    bc = str(row.get('Barcode', row.iloc[0] if len(row) > 0 else '')).strip()
-                    name = str(row.get('Όνομα Προϊόντος', row.iloc[1] if len(row) > 1 else '')).strip()
+                    if pd.isna(row.iloc[0]) and pd.isna(row.iloc[1]):
+                        continue
+                        
+                    bc = str(row.iloc[0]).strip() if len(row) > 0 and not pd.isna(row.iloc[0]) else ''
+                    name = str(row.iloc[1]).strip() if len(row) > 1 and not pd.isna(row.iloc[1]) else ''
                     
                     rules_val = 7
                     for col in row.index:
                         if 'Ημέρες' in str(col) or 'Κανόνα' in str(col):
-                            try:
-                                rules_val = int(row[col])
-                            except:
-                                pass
+                            val = row[col]
+                            if not pd.isna(val):
+                                try:
+                                    rules_val = int(val)
+                                except:
+                                    pass
                     
                     dept_val = "Ψυγείο 1: Γάλατα-Χυμοί"
                     for col in row.index:
                         if 'Τμήμα' in str(col):
-                            val_str = str(row[col]).strip()
-                            if val_str and val_str != 'nan':
-                                dept_val = val_str
+                            val = row[col]
+                            if not pd.isna(val):
+                                val_str = str(val).strip()
+                                if val_str and val_str != 'nan':
+                                    dept_val = val_str
                     
                     if bc and bc != 'nan' and name and name != 'nan':
                         c.execute('''
@@ -222,5 +227,6 @@ with tab3:
                         
                 conn.commit()
                 st.success(f"Επιτυχής εισαγωγή / ενημέρωση {imported_count} προϊόντων! Πηγαίνετε στο tab 'Λίστα Προϊόντων' για να τα δείτε.")
+                st.rerun()
         except Exception as e:
             st.error(f"Σφάλμα κατά την ανάγνωση του αρχείου: {e}")
