@@ -388,17 +388,20 @@ with tab1:
 with tab2:
     st.subheader("📦 Διαχείριση Βάσης Προϊόντων")
     
-    # ➕ Νέα φόρμα απευθείας προσθήκης στη βάση (χωρίς απόσυρση)
+    # ➕ Φόρμα προσθήκης στη βάση με σάρωση Barcode
     with st.expander("➕ Προσθήκη Νέου Προϊόντος στη Βάση"):
-        st.caption("Καταχωρίστε εδώ προϊόντα στη βάση δεδομένων (με barcode, όνομα και ημέρες κανόνα) χωρίς να μπουν αυτόματα στις αποσύρσεις.")
+        st.caption("Σκανάρετε ή πληκτρολογήστε barcode για να προσθέσετε προϊόν στη βάση δεδομένων χωρίς να μπει στις αποσύρσεις.")
         
-        db_scanned = qrcode_scanner(key='db_scanner')
+        db_scanned = qrcode_scanner(key='db_barcode_scanner')
+
         if not db_scanned:
-            db_barcode = st.text_input("Barcode Προϊόντος:", key="db_bc_input", placeholder="π.χ. 520101...")
+            db_barcode = st.text_input("Ή πληκτρολογήστε χειροκίνητα το Barcode:", key="db_manual_bc", placeholder="π.χ. 520101...")
         else:
             db_barcode = db_scanned
-            st.info(f"Σαρώθηκε Barcode: {db_barcode}")
-            
+
+        if db_barcode:
+            st.info(f"Ενεργό Barcode: **{db_barcode}**")
+
         db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
         db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
         db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
