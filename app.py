@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
+from streamlit_qrcode_scanner import qrcode_scanner
 
 # ----------------------------------------------------
-# 1. ΡΥΘΜΙΣΗ ΒΑΣΗΣ ΔΕΔΟΜΕΝΩΝ (SQLite)
+# 1. ΡΥΘΜΙΣΗ ΒΑΣΗΣ ΔΕΔΟΜΕΝΩΝ (SQLITE)
 # ----------------------------------------------------
 conn = sqlite3.connect("inventory.db", check_same_thread=False)
 c = conn.cursor()
@@ -55,7 +56,12 @@ st.divider()
 # ----------------------------------------------------
 st.subheader("📷 Σάρωση / Καταχώρηση Προϊόντος")
 
-scanned_code = st.text_input("🔍 Πληκτρολογήστε ή Σκανάρετε το Barcode:")
+# Κουμπί ενεργοποίησης κάμερας σαρωτή
+scanned_code = qrcode_scanner(key='barcode_scanner', box_color="#ff4b4b")
+
+# Εναλλακτικά πεδίο χειροκίνητης πληκτρολόγησης αν δεν γίνει σάρωση
+if not scanned_code:
+    scanned_code = st.text_input("Ή πληκτρολογήστε χειροκίνητα το Barcode:")
 
 if scanned_code:
     c.execute("SELECT name, rule_days FROM products WHERE barcode = ?", (scanned_code,))
