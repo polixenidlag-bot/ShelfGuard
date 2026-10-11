@@ -3,6 +3,14 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
 from streamlit_qrcode_scanner import qrcode_scanner
+import re
+
+try:
+    import pytesseract
+    from PIL import Image
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
 
 # ----------------------------------------------------
 # 1. ΡΥΘΜΙΣΗ ΒΑΣΗΣ ΔΕΔΟΜΕΝΩΝ (SQLITE)
@@ -131,6 +139,48 @@ DEPARTMENTS = [
     "Ψυγεία ΑΠΟΘΗΚΗ"
 ]
 
+# Συνάρτηση επιλογής ημερομηνίας με Live Κάμερα (OCR) ή Ημερολόγιο
+def get_expiry_date_input(key_suffix):
+    method = st.radio(
+        "📅 Τρόπος καταχώρησης ημερομηνίας λήξης:",
+        ["📅 Επιλογή από Ημερολόγιο", "📸 Live Σάρωση Ημερομηνίας (Κάμερα)"],
+        horizontal=True,
+        key=f"method_{key_suffix}"
+    )
+    
+    selected_date = datetime.today().date()
+    
+    if method == "📸 Live Σάρωση Ημερομηνίας (Κάμερα)" and OCR_AVAILABLE:
+        st.info("💡 Πατήστε το κουμπί της κάμερας παρακάτω για να τραβήξετε στιγμιότυπο την ημερομηνία.")
+        camera_img = st.camera_input("Τραβήξτε την ημερομηνία λήξης", key=f"live_cam_{key_suffix}")
+        
+        if camera_img is not None:
+            try:
+                image = Image.open(camera_img)
+                raw_text = pytesseract.image_to_string(image, config='--psm 6')
+                
+                # Αναζήτηση ημερομηνίας με Regex (π.χ. DD/MM/YYYY ή DD-MM-YY)
+                date_patterns = re.findall(r'\b(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})\b', raw_text)
+                if date_patterns:
+                    d, m, y = date_patterns[0]
+                    if len(y) == 2:
+                        y = "20" + y
+                    detected_date = datetime(int(y), int(m), int(d)).date()
+                    st.success(f"✨ Ανιχνεύθηκε: **{detected_date.strftime('%d/%m/%Y')}**")
+                    selected_date = st.date_input("Επιβεβαίωση / Διόρθωση:", value=detected_date, format="DD/MM/YYYY", key=f"verified_{key_suffix}")
+                else:
+                    st.warning("⚠️ Δεν ανιχνεύθηκε αυτόματα ημερομηνία. Επιλέξτε την από κάτω:")
+                    selected_date = st.date_input("Ημερομηνία Λήξης:", datetime.today(), format="DD/MM/YYYY", key=f"fallback_{key_suffix}")
+            except Exception as e:
+                st.error(f"Σφάλμα ανάγνωσης: {e}")
+                selected_date = st.date_input("Ημερομηνία Λήξης:", datetime.today(), format="DD/MM/YYYY", key=f"err_{key_suffix}")
+        else:
+            selected_date = st.date_input("Ημερομηνία Λήξης (επιλέξτε ή τραβήξτε φωτογραφία):", datetime.today(), format="DD/MM/YYYY", key=f"wait_{key_suffix}")
+    else:
+        selected_date = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), format="DD/MM/YYYY", key=f"cal_{key_suffix}")
+        
+    return selected_date
+
 # ----------------------------------------------------
 # TAB 1: ΣΑΡΩΣΗ & ΑΠΟΣΥΡΣΕΙΣ
 # ----------------------------------------------------
@@ -174,7 +224,7 @@ with tab1:
                 c.execute("UPDATE products SET department = ? WHERE barcode = ?", (selected_dept, scanned_code))
                 conn.commit()
                 
-                expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), format="DD/MM/YYYY", key="exp_date_1")
+                expiry_input = get_expiry_date_input("existing_prod")
                 qty_input = st.number_input("📦 Τεμάχια (Προαιρετικό):", min_value=1, value=1, key="qty_input_1")
                 
                 if st.button("➕ Προσθήκη στις Αποσύρσεις", key="add_w_btn", use_container_width=True):
@@ -191,7 +241,7 @@ with tab1:
                 st.warning("⚠️ Νέο Προϊόν! Παρακαλώ καταχωρίστε τα στοιχεία του:")
                 new_name = st.text_input("Όνομα Προϊόντος:", key="new_n", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
                 new_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="new_r")
-                expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), key="new_exp", format="DD/MM/YYYY")
+                expiry_input = get_expiry_date_input("new_prod")
                 qty_input_new = st.number_input("📦 Τεμάχια (Προαιρετικό):", min_value=1, value=1, key="qty_input_new")
                 
                 if st.button("💾 Αποθήκευση Προϊόντος & Καταχώρηση", key="save_new_btn", use_container_width=True):
