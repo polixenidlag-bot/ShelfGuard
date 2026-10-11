@@ -53,8 +53,8 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 st.title("🧊 ShelfGuard - Έλεγχος Αποσύρσεων")
 
-# Tabs πλοήγησης
-tab1, tab2, tab3 = st.tabs(["📷 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων", "📂 Μαζική Εισαγωγή Excel"])
+# Tabs πλοήγησης (Μόνο 2 πλέον)
+tab1, tab2 = st.tabs(["📷 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
 DEPARTMENTS = [
     "Ψυγείο 1: Γάλατα-Χυμοί",
@@ -181,65 +181,3 @@ with tab2:
             st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα.")
     except Exception as e:
         st.error(f"Σφάλμα ανάγνωσης λίστας: {e}")
-
-# ----------------------------------------------------
-# TAB 3: ΜΑΖΙΚΗ ΕΙΣΑΓΩΓΗ EXCEL / CSV
-# ----------------------------------------------------
-with tab3:
-    st.subheader("📂 Μαζική Εισαγωγή από Excel / CSV")
-    st.markdown("""
-    Ανεβάστε το αρχείο σας (.xlsx) για να περαστούν όλα τα προϊόντα αυτόματα!
-    """)
-    
-    uploaded_file = st.file_uploader("Επιλέξτε αρχείο Excel (.xlsx) ή CSV", type=["xlsx", "csv"])
-    
-    if uploaded_file is not None:
-        try:
-            if uploaded_file.name.endswith('.csv'):
-                df_import = pd.read_csv(uploaded_file)
-            else:
-                df_import = pd.read_excel(uploaded_file, engine='openpyxl')
-            
-            st.success("Το αρχείο διαβάστηκε επιτυχώς! Προεπισκόπηση:")
-            st.dataframe(df_import.head(), use_container_width=True)
-            
-            if st.button("🚀 Οριστική Εισαγωγή Προϊόντων στη Βάση"):
-                imported_count = 0
-                for _, row in df_import.iterrows():
-                    if pd.isna(row.iloc[0]) and pd.isna(row.iloc[1]):
-                        continue
-                        
-                    bc = str(row.iloc[0]).strip() if len(row) > 0 and not pd.isna(row.iloc[0]) else ''
-                    name = str(row.iloc[1]).strip() if len(row) > 1 and not pd.isna(row.iloc[1]) else ''
-                    
-                    rules_val = 7
-                    for col in row.index:
-                        if 'Ημέρες' in str(col) or 'Κανόνα' in str(col):
-                            val = row[col]
-                            if not pd.isna(val):
-                                try:
-                                    rules_val = int(val)
-                                except:
-                                    pass
-                    
-                    dept_val = "Ψυγείο 1: Γάλατα-Χυμοί"
-                    for col in row.index:
-                        if 'Τμήμα' in str(col):
-                            val = row[col]
-                            if not pd.isna(val):
-                                val_str = str(val).strip()
-                                if val_str and val_str != 'nan':
-                                    dept_val = val_str
-                    
-                    if bc and bc != 'nan' and name and name != 'nan':
-                        c.execute('''
-                            INSERT OR REPLACE INTO products (barcode, name, rule_days, department)
-                            VALUES (?, ?, ?, ?)
-                        ''', (bc, name, rules_val, dept_val))
-                        imported_count += 1
-                        
-                conn.commit()
-                st.success(f"Επιτυχής εισαγωγή / ενημέρωση {imported_count} προϊόντων!")
-                st.rerun()
-        except Exception as e:
-            st.error(f"Σφάλμα κατά την ανάγνωση του αρχείου: {e}")
