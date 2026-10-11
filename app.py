@@ -104,9 +104,9 @@ div[data-testid="stMetric"] {
 </style>
 """, unsafe_allow_html=True)
 
-# Τίτλος με εφέ
-st.markdown("<h1 style='text-align: center; color: #0f172a; font-weight: 800; margin-bottom: 0px;'>🧊 ShelfGuard</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #64748b; font-size: 15px; margin-top: 5px; margin-bottom: 25px;'>Σύστημα Έξυπνου Ελέγχου & Αποσύρσεων</p>", unsafe_allow_html=True)
+# Τίτλος εφαρμογής
+st.markdown("<h1 style='text-align: center; color: #0f172a; font-weight: 800; font-size: 24px; margin-bottom: 0px;'>🧊 ShelfGuard</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #1e293b; font-size: 14px; font-weight: 700; margin-top: 5px; margin-bottom: 25px;'>ΣΥΣΤΗΜΑ ΑΣΦΑΛΟΥΣ ΕΛΕΓΧΟΥ ΗΜΕΡΟΜΗΝΙΩΝ ΚΑΙ ΑΠΟΣΥΡΣΕΩΝ</p>", unsafe_allow_html=True)
 
 # Tabs πλοήγησης
 tab1, tab2 = st.tabs(["📷 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
@@ -128,7 +128,7 @@ with tab1:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # --- Υπολογισμός Metrics (Dashboard Κουτιά) ---
+    # --- Υπολογισμός Metrics ---
     today_metric_date = datetime.today().date()
     c.execute("SELECT COUNT(*) FROM withdrawals WHERE department = ? AND status = 'Pending' AND withdrawal_date = ?", (selected_dept, today_metric_date))
     count_today = c.fetchone()[0]
@@ -140,7 +140,7 @@ with tab1:
     with m1:
         st.metric("🚨 Σημερινές Αποσύρσεις", count_today)
     with m2:
-        st.metric("⏳ Εκκρεμή Προϊόντα", count_total_pending)
+        st.metric("⏳ Εκκρεμείς Αποσύρσεις", count_total_pending)
         
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -199,13 +199,38 @@ with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader(f"🚨 Λίστα Αποσύρσεων - {selected_dept}")
 
-    # --- Εργαλεία: Αναζήτηση & Ιστορικό ---
-    col_search, col_hist = st.columns([2, 1])
-    with col_search:
-        search_query = st.text_input("🔍 Αναζήτηση...", key="search_w", placeholder="Όνομα προϊόντος...")
-    with col_hist:
-        st.markdown("<br>", unsafe_allow_html=True)
-        show_history = st.checkbox("📂 Ιστορικό", key="show_hist_cb")
+    # --- ΟΡΓΑΝΩΜΕΝΕΣ ΕΝΕΡΓΕΙΕΣ & ΕΡΓΑΛΕΙΑ (Ψηλά και ευδιάκριτα) ---
+    with st.container():
+        col_search, col_hist = st.columns([2, 1])
+        with col_search:
+            search_query = st.text_input("🔍 Αναζήτηση προϊόντος...", key="search_w", placeholder="Γράψτε όνομα...")
+        with col_hist:
+            st.markdown("<br>", unsafe_allow_html=True)
+            show_history = st.checkbox("📂 Εμφάνιση Ιστορικού", key="show_hist_cb")
+
+    # Κουμπί / Expander Αναφοράς Viber οργανωμένο ξεχωριστά
+    pending_df = pd.read_sql_query('''
+        SELECT product_name, expiry_date, withdrawal_date 
+        FROM withdrawals 
+        WHERE department = ? AND status = 'Pending' 
+        ORDER BY withdrawal_date ASC
+    ''', conn, params=(selected_dept,))
+
+    if not pending_df.empty:
+        with st.expander("📋 Ενέργεια: Δημιουργία Αναφοράς για Viber"):
+            report_lines = [f"📊 *ΑΝΑΦΟΡΑ ΑΠΟΣΥΡΣΕΩΝ* - *{selected_dept}*"]
+            report_lines.append(f"📅 Ημερομηνία: {datetime.today().strftime('%d/%m/%Y')}\n")
+            for _, r in pending_df.iterrows():
+                p_name = r['product_name']
+                exp_d = datetime.strptime(str(r['expiry_date']), "%Y-%m-%d").strftime("%d/%m/%Y")
+                w_d = datetime.strptime(str(r['withdrawal_date']), "%Y-%m-%d").strftime("%d/%m/%Y")
+                report_lines.append(f"• *{p_name}* | Λήξη: {exp_d} | Απόσυρση: {w_d}")
+            
+            report_text = "\n".join(report_lines)
+            st.text_area("Αντιγράψτε το κείμενο:", value=report_text, height=140, key="report_textarea")
+            st.caption("Αντιγράψτε και στείλτε το απευθείας στο Viber!")
+
+    st.markdown("<br>", unsafe_allow_html=True)
 
     if show_history:
         query_str = '''
@@ -227,30 +252,6 @@ with tab1:
     if search_query and not df_withdrawals.empty:
         df_withdrawals = df_withdrawals[df_withdrawals['Προϊόν'].str.contains(search_query, case=False, na=False)]
 
-    # --- Κουμπί Ημερήσιας Αναφοράς για Viber ---
-    pending_df = pd.read_sql_query('''
-        SELECT product_name, expiry_date, withdrawal_date 
-        FROM withdrawals 
-        WHERE department = ? AND status = 'Pending' 
-        ORDER BY withdrawal_date ASC
-    ''', conn, params=(selected_dept,))
-
-    if not pending_df.empty:
-        with st.expander("📋 Δημιουργία Ημερήσιας Αναφοράς για Viber"):
-            report_lines = [f"📊 *ΑΝΑΦΟΡΑ ΑΠΟΣΥΡΣΕΩΝ* - *{selected_dept}*"]
-            report_lines.append(f"📅 Ημερομηνία: {datetime.today().strftime('%d/%m/%Y')}\n")
-            for _, r in pending_df.iterrows():
-                p_name = r['product_name']
-                exp_d = datetime.strptime(str(r['expiry_date']), "%Y-%m-%d").strftime("%d/%m/%Y")
-                w_d = datetime.strptime(str(r['withdrawal_date']), "%Y-%m-%d").strftime("%d/%m/%Y")
-                report_lines.append(f"• *{p_name}* | Λήξη: {exp_d} | Απόσυρση: {w_d}")
-            
-            report_text = "\n".join(report_lines)
-            st.text_area("Αντιγράψτε το κείμενο:", value=report_text, height=140, key="report_textarea")
-            st.caption("Αντιγράψτε και στείλτε το απευθείας στο Viber!")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
     if not df_withdrawals.empty:
         today = datetime.today().date()
         
@@ -261,30 +262,39 @@ with tab1:
             
             w_date_str = w_date.strftime("%d/%m/%Y")
             
+            # --- ΝΕΑ ΧΡΩΜΑΤΙΚΗ ΛΟΓΙΚΗ STATUS ---
             if status == 'Done':
                 badge = "✅ ΟΛΟΚΛΗΡΩΘΗΚΕ"
-            elif w_date == today:
-                badge = "🚨 ΑΠΟΣΥΡΣΗ ΣΗΜΕΡΑ"
-            elif w_date == today + timedelta(days=1):
-                badge = "⚠️ ΑΠΟΣΥΡΣΗ ΑΥΡΙΟ"
+                badge_bg = "#f1f5f9"
+                badge_color = "#64748b"
+            elif w_date < today:
+                badge = "🔴 ΕΧΕΙ ΠΕΡΑΣΕΙ Η ΗΜΕΡΟΜΗΝΙΑ"
+                badge_bg = "#fee2e2"
+                badge_color = "#991b1b"
+            elif w_date == today or w_date == today + timedelta(days=1):
+                badge = "🟠 ΑΠΟΣΥΡΣΗ ΣΗΜΕΡΑ/ΑΜΕΣΑ"
+                badge_bg = "#ffedd5"
+                badge_color = "#c2410c"
             else:
-                badge = "⏳ OK"
+                badge = "🟢 ΕΝΕΡΓΟ (OK)"
+                badge_bg = "#dcfce7"
+                badge_color = "#166534"
                 
-            # Εμφάνιση σε πολυτελή κάρτα με μεγάλες, έντονες ημερομηνίες
+            # Κάρτα προϊόντος
             with st.container():
                 col1, col2, col3 = st.columns([3, 2, 1])
                 with col1:
-                    st.markdown(f"<span style='font-size: 16px; font-weight: 800; color: #0f172a;'>{row['Προϊόν']}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 6px;'>{row['Προϊόν']}</div>", unsafe_allow_html=True)
                     st.markdown(
-                        f"<div style='margin-top: 6px;'>"
-                        f"<span style='color: #0284c7; font-size: 14px; font-weight: bold;'>🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')}</span>"
-                        f" &nbsp;|&nbsp; "
-                        f"<span style='color: #dc2626; font-size: 14px; font-weight: 800;'>⏰ Απόσυρση: {w_date_str}</span>"
+                        f"<div style='line-height: 1.6;'>"
+                        f"<span style='background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 6px; font-size: 15px; font-weight: 800;'>🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')}</span>"
+                        f"<br>"
+                        f"<span style='background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 6px; font-size: 16px; font-weight: 900;'>⏰ Απόσυρση: {w_date_str}</span>"
                         f"</div>", 
                         unsafe_allow_html=True
                     )
                 with col2:
-                    st.markdown(f"<span style='font-size: 12px; font-weight: 700; background: #f1f5f9; padding: 6px 10px; border-radius: 8px;'>{badge}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-size: 11px; font-weight: 700; background: {badge_bg}; color: {badge_color}; padding: 6px 10px; border-radius: 8px; text-align: center;'>{badge}</div>", unsafe_allow_html=True)
                 with col3:
                     if status == 'Pending':
                         if st.button("✔️", key=f"done_{row['id']}"):
@@ -313,3 +323,4 @@ with tab2:
             st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα.")
     except Exception as e:
         st.error(f"Σφάλμα ανάγνωσης λίστας: {e}")
+
