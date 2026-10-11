@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
+import urllib.parse
 from datetime import datetime, timedelta
 from streamlit_qrcode_scanner import qrcode_scanner
 
@@ -32,9 +33,17 @@ c.execute('''
         product_name TEXT NOT NULL,
         expiry_date DATE NOT NULL,
         withdrawal_date DATE NOT NULL,
+        quantity INTEGER DEFAULT 1,
         status TEXT DEFAULT 'Pending'
     )
 ''')
+
+try:
+    c.execute("ALTER TABLE withdrawals ADD COLUMN quantity INTEGER DEFAULT 1")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass
+
 conn.commit()
 
 # ----------------------------------------------------
@@ -167,15 +176,16 @@ with tab1:
                 conn.commit()
                 
                 expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), format="DD/MM/YYYY", key="exp_date_1")
+                qty_input = st.number_input("📦 Τεμάχια (Προαιρετικό):", min_value=1, value=1, key="qty_input_1")
                 
                 if st.button("➕ Προσθήκη στις Αποσύρσεις", key="add_w_btn", use_container_width=True):
                     withdrawal_date = expiry_input - timedelta(days=rule_days)
                     c.execute('''
-                        INSERT INTO withdrawals (department, barcode, product_name, expiry_date, withdrawal_date)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', (selected_dept, scanned_code, prod_name, expiry_input, withdrawal_date))
+                        INSERT INTO withdrawals (department, barcode, product_name, expiry_date, withdrawal_date, quantity)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (selected_dept, scanned_code, prod_name, expiry_input, withdrawal_date, qty_input))
                     conn.commit()
-                    st.toast(f"Προστέθηκε το {prod_name}!", icon="🎉")
+                    st.toast(f"Προστέθηκε το {prod_name} ({qty_input} τεμ.)!", icon="🎉")
                     st.rerun()
                     
             else:
@@ -183,6 +193,7 @@ with tab1:
                 new_name = st.text_input("Όνομα Προϊόντος:", key="new_n", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
                 new_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="new_r")
                 expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), key="new_exp", format="DD/MM/YYYY")
+                qty_input_new = st.number_input("📦 Τεμάχια (Προαιρετικό):", min_value=1, value=1, key="qty_input_new")
                 
                 if st.button("💾 Αποθήκευση Προϊόντος & Καταχώρηση", key="save_new_btn", use_container_width=True):
                     if new_name:
@@ -191,9 +202,9 @@ with tab1:
                         
                         withdrawal_date = expiry_input - timedelta(days=new_rule)
                         c.execute('''
-                            INSERT INTO withdrawals (department, barcode, product_name, expiry_date, withdrawal_date)
-                            VALUES (?, ?, ?, ?, ?)
-                        ''', (selected_dept, scanned_code, new_name, expiry_input, withdrawal_date))
+                            INSERT INTO withdrawals (department, barcode, product_name, expiry_date, withdrawal_date, quantity)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ''', (selected_dept, scanned_code, new_name, expiry_input, withdrawal_date, qty_input_new))
                         conn.commit()
                         st.success("Το προϊόν αποθηκεύτηκε στη βάση και προστέθηκε στις αποσύρσεις!")
                         st.rerun()
@@ -213,38 +224,71 @@ with tab1:
             show_history = st.checkbox("📂 Εμφάνιση Ιστορικού", key="show_hist_cb")
 
     pending_df = pd.read_sql_query('''
-        SELECT product_name, expiry_date, withdrawal_date 
+        SELECT product_name, expiry_date, withdrawal_date, quantity 
         FROM withdrawals 
         WHERE department = ? AND status = 'Pending' 
         ORDER BY withdrawal_date ASC
     ''', conn, params=(selected_dept,))
 
     if not pending_df.empty:
-        with st.expander("📋 Ενέργεια: Δημιουργία Αναφοράς για Viber"):
+        with st.expander("📤 Ενέργεια: Εξαγωγή & Κοινή Χρήση Αναφοράς"):
             report_lines = [f"📊 *ΑΝΑΦΟΡΑ ΑΠΟΣΥΡΣΕΩΝ* - *{selected_dept}*"]
             report_lines.append(f"📅 Ημερομηνία: {datetime.today().strftime('%d/%m/%Y')}\n")
             for _, r in pending_df.iterrows():
                 p_name = r['product_name']
                 exp_d = datetime.strptime(str(r['expiry_date']), "%Y-%m-%d").strftime("%d/%m/%Y")
                 w_d = datetime.strptime(str(r['withdrawal_date']), "%Y-%m-%d").strftime("%d/%m/%Y")
-                report_lines.append(f"• *{p_name}* | Λήξη: {exp_d} | Απόσυρση: {w_d}")
+                qty = r['quantity'] if 'quantity' in r and pd.notnull(r['quantity']) else 1
+                report_lines.append(f"• *{p_name}* ({qty} τεμ.) | Λήξη: {exp_d} | Απόσυρση: {w_d}")
             
             report_text = "\n".join(report_lines)
-            st.text_area("Αντιγράψτε το κείμενο:", value=report_text, height=140, key="report_textarea")
-            st.caption("Αντιγράψτε και στείλτε το απευθείας στο Viber!")
+            
+            # 1. Κουμπί Λήψης ως Αρχείο .txt (Έτοιμος φάκελος/αρχείο)
+            st.download_button(
+                label="📥 Λήψη Αναφοράς ως Αρχείο (.txt)",
+                data=report_text,
+                file_name=f"Anofora_Aposyrsewn_{datetime.today().strftime('%Y-%m-%d')}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+            
+            # 2. Κουμπί Native Share (Άνοιγμα μενού κοινής χρήσης κινητού για Viber, WhatsApp, Gmail κτλ.)
+            safe_text = report_text.replace('\n', '\\n').replace('"', '\\"')
+            share_html = f"""
+            <div style="margin-top: 10px;">
+                <button onclick="shareText()" style="width: 100%; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 15px; cursor: pointer; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);">
+                    🚀 Άμεση Κοινή Χρήση (Viber, WhatsApp, Email...)
+                </button>
+            </div>
+            <script>
+            function shareText() {{
+                const text = "{safe_text}";
+                if (navigator.share) {{
+                    navigator.share({{
+                        title: 'Αναφορά Αποσύρσεων',
+                        text: text
+                    }}).catch(console.error);
+                }} else {{
+                    navigator.clipboard.writeText(text);
+                    alert('Το κείμενο αντιγράφηκε στο πρόχειρο!');
+                }}
+            }}
+            </script>
+            """
+            st.components.v1.html(share_html, height=55)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
     if show_history:
         query_str = '''
-            SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", status
+            SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", quantity AS "Τεμάχια", status
             FROM withdrawals
             WHERE department = ?
             ORDER BY withdrawal_date ASC
         '''
     else:
         query_str = '''
-            SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", status
+            SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", quantity AS "Τεμάχια", status
             FROM withdrawals
             WHERE department = ? AND status = 'Pending'
             ORDER BY withdrawal_date ASC
@@ -261,6 +305,7 @@ with tab1:
         for index, row in df_withdrawals.iterrows():
             w_date = datetime.strptime(str(row['Απόσυρση']), "%Y-%m-%d").date()
             exp_date = datetime.strptime(str(row['Λήξη']), "%Y-%m-%d").date()
+            qty = row['Τεμάχια'] if pd.notnull(row['Τεμάχια']) else 1
             status = row['status']
             
             w_date_str = w_date.strftime("%d/%m/%Y")
@@ -286,7 +331,7 @@ with tab1:
             with st.container():
                 col1, col2, col3 = st.columns([3, 2, 1])
                 with col1:
-                    st.markdown(f"<div style='font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 6px;'>{row['Προϊόν']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 6px;'>{row['Προϊόν']} <span style='font-size: 14px; color: #0284c7; font-weight: 600;'>({qty} τεμ.)</span></div>", unsafe_allow_html=True)
                     st.markdown(
                         f"<div style='line-height: 1.6;'>"
                         f"<span style='background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 6px; font-size: 15px; font-weight: 800;'>🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')}</span>"
