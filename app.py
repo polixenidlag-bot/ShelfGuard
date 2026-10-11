@@ -38,49 +38,75 @@ c.execute('''
 conn.commit()
 
 # ----------------------------------------------------
-# 2. ΜΟΝΤΕΡΝΑ ΔΙΑΜΟΡΦΩΣΗ ΣΕΛΙΔΑΣ & UI (CSS)
+# 2. ΕΝΤΥΠΩΣΙΑΚo UI & MODERN CSS
 # ----------------------------------------------------
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
-modern_ui_style = """
+st.markdown("""
 <style>
 /* Απόκρυψη Streamlit Header/Footer/Menu */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
 
-/* Γενικό φόντο & γραμματοσειρά */
+/* Γενικό φόντο */
 .stApp {
-    background-color: #f4f6f9;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
 }
 
-/* Στρογγυλεμένα κουμπιά */
+/* Κάρτες / Containers με σκιά και στρογγυλεμένες γωνίες */
+div[data-testid="stVerticalBlock"] > div[style*="border"] {
+    background: #ffffff;
+    border-radius: 16px !important;
+    padding: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
+}
+
+/* Κουμπιά με εφέ */
 .stButton>button {
-    border-radius: 10px;
+    border-radius: 12px;
     font-weight: 600;
-    transition: all 0.3s ease;
+    letter-spacing: 0.3px;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+.stButton>button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-/* Καρτέλες (Tabs) ομορφότερες */
+/* Custom Tabs Styling */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
+    gap: 10px;
+    background-color: transparent;
 }
 .stTabs [data-baseweb="tab"] {
-    border-radius: 8px 8px 0px 0px;
-    padding: 10px 20px;
-    background-color: #e9ecef;
-    font-weight: 600;
+    border-radius: 12px 12px 0px 0px;
+    padding: 12px 24px;
+    background-color: #ffffff;
+    font-weight: 700;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
 }
 .stTabs [aria-selected="true"] {
-    background-color: #ffffff !important;
-    color: #0d6efd !important;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+    color: #ffffff !important;
+}
+
+/* Metric boxes custom look */
+div[data-testid="stMetric"] {
+    background-color: #ffffff;
+    padding: 15px;
+    border-radius: 14px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+    border: 1px solid #e2e8f0;
 }
 </style>
-"""
-st.markdown(modern_ui_style, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-st.markdown("<h2 style='text-align: center; color: #1e293b;'>🧊 ShelfGuard</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #64748b; margin-bottom: 20px;'>Έξυπνος Έλεγχος Αποσύρσεων & Ημερομηνιών</p>", unsafe_allow_html=True)
+# Τίτλος με εφέ
+st.markdown("<h1 style='text-align: center; color: #0f172a; font-weight: 800; margin-bottom: 0px;'>🧊 ShelfGuard</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #64748b; font-size: 15px; margin-top: 5px; margin-bottom: 25px;'>Σύστημα Έξυπνου Ελέγχου & Αποσύρσεων</p>", unsafe_allow_html=True)
 
 # Tabs πλοήγησης
 tab1, tab2 = st.tabs(["📷 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
@@ -97,12 +123,28 @@ DEPARTMENTS = [
 # TAB 1: ΣΑΡΩΣΗ & ΑΠΟΣΥΡΣΕΙΣ
 # ----------------------------------------------------
 with tab1:
-    with st.container(border=True):
+    with st.container():
         selected_dept = st.selectbox("📍 Επιλέξτε Τμήμα / Ψυγείο:", DEPARTMENTS, key="dept_tab1")
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    with st.container(border=True):
+    # --- Υπολογισμός Metrics (Dashboard Κουτιά) ---
+    today_metric_date = datetime.today().date()
+    c.execute("SELECT COUNT(*) FROM withdrawals WHERE department = ? AND status = 'Pending' AND withdrawal_date = ?", (selected_dept, today_metric_date))
+    count_today = c.fetchone()[0]
+    
+    c.execute("SELECT COUNT(*) FROM withdrawals WHERE department = ? AND status = 'Pending'", (selected_dept,))
+    count_total_pending = c.fetchone()[0]
+
+    m1, m2 = st.columns(2)
+    with m1:
+        st.metric("🚨 Σημερινές Αποσύρσεις", count_today)
+    with m2:
+        st.metric("⏳ Εκκρεμή Προϊόντα", count_total_pending)
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    with st.container():
         st.subheader("📷 Σάρωση / Καταχώρηση Προϊόντος")
         scanned_code = qrcode_scanner(key='barcode_scanner')
 
@@ -122,7 +164,7 @@ with tab1:
                 
                 expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), format="DD/MM/YYYY", key="exp_date_1")
                 
-                if st.button("➕ Προσθήκη στις Αποσύρσεις", key="add_w_btn", type="primary"):
+                if st.button("➕ Προσθήκη στις Αποσύρσεις", key="add_w_btn", type="primary", use_container_width=True):
                     withdrawal_date = expiry_input - timedelta(days=rule_days)
                     c.execute('''
                         INSERT INTO withdrawals (department, barcode, product_name, expiry_date, withdrawal_date)
@@ -138,7 +180,7 @@ with tab1:
                 new_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="new_r")
                 expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), key="new_exp", format="DD/MM/YYYY")
                 
-                if st.button("💾 Αποθήκευση Προϊόντος & Καταχώρηση", key="save_new_btn", type="primary"):
+                if st.button("💾 Αποθήκευση Προϊόντος & Καταχώρηση", key="save_new_btn", type="primary", use_container_width=True):
                     if new_name:
                         c.execute("INSERT OR REPLACE INTO products (barcode, name, rule_days, department) VALUES (?, ?, ?, ?)",
                                   (scanned_code, new_name, new_rule, selected_dept))
@@ -221,25 +263,21 @@ with tab1:
             
             if status == 'Done':
                 badge = "✅ ΟΛΟΚΛΗΡΩΘΗΚΕ"
-                border_color = "#e9ecef"
             elif w_date == today:
                 badge = "🚨 ΑΠΟΣΥΡΣΗ ΣΗΜΕΡΑ"
-                border_color = "#ff4b4b"
             elif w_date == today + timedelta(days=1):
                 badge = "⚠️ ΑΠΟΣΥΡΣΗ ΑΥΡΙΟ"
-                border_color = "#ffa500"
             else:
                 badge = "⏳ OK"
-                border_color = "#4caf50"
                 
-            # Εμφάνιση μέσα σε όμορφα "Cards" με περίγραμμα
-            with st.container(border=True):
+            # Εμφάνιση σε πολυτελή κάρτα
+            with st.container():
                 col1, col2, col3 = st.columns([3, 2, 1])
                 with col1:
                     st.markdown(f"**{row['Προϊόν']}**")
                     st.caption(f"🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')} | ⏰ Απόσυρση: {w_date_str}")
                 with col2:
-                    st.markdown(f"<span style='font-size: 13px; font-weight: bold;'>{badge}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size: 12px; font-weight: 700; background: #f1f5f9; padding: 6px 10px; border-radius: 8px;'>{badge}</span>", unsafe_allow_html=True)
                 with col3:
                     if status == 'Pending':
                         if st.button("✔️", key=f"done_{row['id']}"):
@@ -268,4 +306,3 @@ with tab2:
             st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα.")
     except Exception as e:
         st.error(f"Σφάλμα ανάγνωσης λίστας: {e}")
-
