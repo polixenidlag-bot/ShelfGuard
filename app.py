@@ -76,6 +76,10 @@ with tab1:
             prod_name, rule_days = product
             st.success(f"✅ Βρέθηκε: **{prod_name}** (Κανόνας: -{rule_days} ημέρες)")
             
+            # Ενημέρωση τμήματος για το προϊόν
+            c.execute("UPDATE products SET department = ? WHERE barcode = ?", (selected_dept, scanned_code))
+            conn.commit()
+            
             expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), format="DD/MM/YYYY", key="exp_date_1")
             
             if st.button("➕ Προσθήκη στις Αποσύρσεις", key="add_w_btn"):
@@ -96,7 +100,7 @@ with tab1:
             
             if st.button("💾 Αποθήκευση Προϊόντος & Καταχώρηση", key="save_new_btn"):
                 if new_name:
-                    c.execute("INSERT INTO products (barcode, name, rule_days, department) VALUES (?, ?, ?, ?)",
+                    c.execute("INSERT OR REPLACE INTO products (barcode, name, rule_days, department) VALUES (?, ?, ?, ?)",
                               (scanned_code, new_name, new_rule, selected_dept))
                     
                     withdrawal_date = expiry_input - timedelta(days=new_rule)
@@ -165,7 +169,7 @@ with tab2:
             st.dataframe(df_products, use_container_width=True)
             st.caption(f"Συνολικά προϊόντα στη βάση: {len(df_products)}")
         else:
-            st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα. Ανεβάστε το αρχείο σας στο tab 'Μαζική Εισαγωγή Excel'.")
+            st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα.")
     except Exception as e:
         st.error(f"Σφάλμα ανάγνωσης λίστας: {e}")
 
@@ -226,7 +230,7 @@ with tab3:
                         imported_count += 1
                         
                 conn.commit()
-                st.success(f"Επιτυχής εισαγωγή / ενημέρωση {imported_count} προϊόντων! Πηγαίνετε στο tab 'Λίστα Προϊόντων' για να τα δείτε.")
+                st.success(f"Επιτυχής εισαγωγή / ενημέρωση {imported_count} προϊόντων!")
                 st.rerun()
         except Exception as e:
             st.error(f"Σφάλμα κατά την ανάγνωση του αρχείου: {e}")
