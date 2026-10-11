@@ -131,7 +131,6 @@ DEPARTMENTS = [
     "Ψυγεία ΑΠΟΘΗΚΗ"
 ]
 
-# Αρχικοποίηση κατάστασης φίλτρου
 if "list_filter" not in st.session_state:
     st.session_state.list_filter = "pending_all"
 
@@ -152,7 +151,6 @@ with tab1:
     c.execute("SELECT COUNT(*) FROM withdrawals WHERE department = ? AND status = 'Pending'", (selected_dept,))
     count_total_pending = c.fetchone()[0]
 
-    # Metrics & Clickable Quick Filters
     m1, m2 = st.columns(2)
     with m1:
         st.metric("🚨 Σημερινές Αποσύρσεις", count_today)
@@ -168,21 +166,27 @@ with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
 
     with st.container():
-        st.subheader("📷 Σάρωση / Καταχώρηση Προϊόντος")
-        scanned_code = qrcode_scanner(key='barcode_scanner')
+        st.subheader("📦 Καταχώρηση / Σάρωση Προϊόντος")
+        
+        # Κουμπί ενεργοποίησης scanner (AppSheet Style)
+        use_scanner_tab1 = st.toggle("📷 Ενεργοποίηση Scanner Κάμερας", key="toggle_scan_tab1")
+        
+        scanned_code = None
+        if use_scanner_tab1:
+            scanned_code = qrcode_scanner(key='barcode_scanner_tab1')
+        
+        manual_code = st.text_input("Barcode Προϊόντος (ή πληκτρολογήστε):", key="manual_bc_tab1", placeholder="π.χ. 520101...", value=scanned_code if scanned_code else "")
+        active_code = scanned_code if scanned_code else manual_code
 
-        if not scanned_code:
-            scanned_code = st.text_input("Ή πληκτρολογήστε χειροκίνητα το Barcode:", key="manual_bc", placeholder="π.χ. 520101...")
-
-        if scanned_code:
-            c.execute("SELECT name, rule_days FROM products WHERE barcode = ?", (scanned_code,))
+        if active_code:
+            c.execute("SELECT name, rule_days FROM products WHERE barcode = ?", (active_code,))
             product = c.fetchone()
             
             if product:
                 prod_name, rule_days = product
                 st.success(f"✅ Βρέθηκε: **{prod_name}** (Κανόνας: -{rule_days} ημέρες)")
                 
-                c.execute("UPDATE products SET department = ? WHERE barcode = ?", (selected_dept, scanned_code))
+                c.execute("UPDATE products SET department = ? WHERE barcode = ?", (selected_dept, active_code))
                 conn.commit()
                 
                 expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), format="DD/MM/YYYY", key="exp_date_1")
@@ -193,7 +197,7 @@ with tab1:
                     c.execute('''
                         INSERT INTO withdrawals (department, barcode, product_name, expiry_date, withdrawal_date, quantity)
                         VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (selected_dept, scanned_code, prod_name, expiry_input, withdrawal_date, qty_input))
+                    ''', (selected_dept, active_code, prod_name, expiry_input, withdrawal_date, qty_input))
                     conn.commit()
                     st.toast(f"Προστέθηκε το {prod_name} ({qty_input} τεμ.)!", icon="🎉")
                     st.rerun()
@@ -208,13 +212,13 @@ with tab1:
                 if st.button("💾 Αποθήκευση Προϊόντος & Καταχώρηση", key="save_new_btn", use_container_width=True):
                     if new_name:
                         c.execute("INSERT OR REPLACE INTO products (barcode, name, rule_days, department) VALUES (?, ?, ?, ?)",
-                                  (scanned_code, new_name, new_rule, selected_dept))
+                                  (active_code, new_name, new_rule, selected_dept))
                         
                         withdrawal_date = expiry_input - timedelta(days=new_rule)
                         c.execute('''
                             INSERT INTO withdrawals (department, barcode, product_name, expiry_date, withdrawal_date, quantity)
                             VALUES (?, ?, ?, ?, ?, ?)
-                        ''', (selected_dept, scanned_code, new_name, expiry_input, withdrawal_date, qty_input_new))
+                        ''', (selected_dept, active_code, new_name, expiry_input, withdrawal_date, qty_input_new))
                         conn.commit()
                         st.success("Το προϊόν αποθηκεύτηκε στη βάση και προστέθηκε στις αποσύρσεις!")
                         st.rerun()
@@ -387,14 +391,17 @@ with tab1:
 # ----------------------------------------------------
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
-    st.caption("Σκανάρετε ή πληκτρολογήστε barcode για να προσθέσετε προϊόν στη βάση δεδομένων χωρίς να μπει στις αποσύρσεις.")
+    st.caption("Πληκτρολογήστε το barcode ή ενεργοποιήστε το scanner κάμερας για να αποθηκεύσετε νέο προϊόν στη βάση.")
     
-    db_scanned = qrcode_scanner(key='db_barcode_scanner')
-
-    if not db_scanned:
-        db_barcode = st.text_input("Ή πληκτρολογήστε χειροκίνητα το Barcode:", key="db_manual_bc", placeholder="π.χ. 520101...")
-    else:
-        db_barcode = db_scanned
+    # Κουμπί ενεργοποίησης scanner (AppSheet Style)
+    use_scanner_tab2 = st.toggle("📷 Ενεργοποίηση Scanner Κάμερας", key="toggle_scan_tab2")
+    
+    db_scanned = None
+    if use_scanner_tab2:
+        db_scanned = qrcode_scanner(key='barcode_scanner_tab2')
+        
+    db_barcode_input = st.text_input("Barcode Προϊόντος (ή πληκτρολογήστε):", key="db_manual_bc", placeholder="π.χ. 520101...", value=db_scanned if db_scanned else "")
+    db_barcode = db_scanned if db_scanned else db_barcode_input
 
     if db_barcode:
         st.info(f"Ενεργό Barcode: **{db_barcode}**")
