@@ -53,7 +53,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 st.title("🧊 ShelfGuard - Έλεγχος Αποσύρσεων")
 
-# Tabs πλοήγησης (Μόνο 2 πλέον)
+# Tabs πλοήγησης
 tab1, tab2 = st.tabs(["📷 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
 DEPARTMENTS = [
@@ -85,7 +85,6 @@ with tab1:
             prod_name, rule_days = product
             st.success(f"✅ Βρέθηκε: **{prod_name}** (Κανόνας: -{rule_days} ημέρες)")
             
-            # Ενημέρωση τμήματος για το προϊόν
             c.execute("UPDATE products SET department = ? WHERE barcode = ?", (selected_dept, scanned_code))
             conn.commit()
             
@@ -118,66 +117,4 @@ with tab1:
                         VALUES (?, ?, ?, ?, ?)
                     ''', (selected_dept, scanned_code, new_name, expiry_input, withdrawal_date))
                     conn.commit()
-                    st.success("Το προϊόν αποθηκεύτηκε στη βάση και προστέθηκε στις αποσύρσεις!")
-                    st.rerun()
-                else:
-                    st.error("Παρακαλώ συμπληρώστε το όνομα του προϊόντος.")
-
-    st.divider()
-    st.subheader(f"🚨 Λίστα Αποσύρσεων - {selected_dept}")
-
-    df_withdrawals = pd.read_sql_query('''
-        SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", status
-        FROM withdrawals
-        WHERE department = ? AND status = 'Pending'
-        ORDER BY withdrawal_date ASC
-    ''', conn, params=(selected_dept,))
-
-    if not df_withdrawals.empty:
-        today = datetime.today().date()
-        
-        for index, row in df_withdrawals.iterrows():
-            w_date = datetime.strptime(str(row['Απόσυρση']), "%Y-%m-%d").date()
-            exp_date = datetime.strptime(str(row['Λήξη']), "%Y-%m-%d").date()
-            
-            w_date_str = w_date.strftime("%d/%m/%Y")
-            
-            if w_date == today:
-                badge = "🚨 ΑΠΟΣΥΡΣΗ ΣΗΜΕΡΑ"
-                color = "#ff4b4b"
-            elif w_date == today + timedelta(days=1):
-                badge = "⚠️ ΑΠΟΣΥΡΣΗ ΑΥΡΙΟ"
-                color = "#ffa500"
-            else:
-                badge = "⏳ OK"
-                color = "#4caf50"
-                
-            col1, col2, col3 = st.columns([3, 2, 1])
-            with col1:
-                st.markdown(f"**{row['Προϊόν']}**")
-                st.caption(f"Λήξη: {exp_date.strftime('%d/%m/%Y')} | Απόσυρση: {w_date_str}")
-            with col2:
-                st.markdown(f"<span style='color:{color}; font-weight:bold;'>{badge}</span>", unsafe_allow_html=True)
-            with col3:
-                if st.button("✔️", key=f"btn_{row['id']}"):
-                    c.execute("UPDATE withdrawals SET status = 'Done' WHERE id = ?", (row['id'],))
-                    conn.commit()
-                    st.rerun()
-            st.markdown("---")
-    else:
-        st.info("Δεν υπάρχουν εκκρεμείς αποσύρσεις για αυτό το τμήμα.")
-
-# ----------------------------------------------------
-# TAB 2: ΛΙΣΤΑ ΠΡΟΪΟΝΤΩΝ
-# ----------------------------------------------------
-with tab2:
-    st.subheader("📦 Όλα τα Αποθηκευμένα Προϊόντα")
-    try:
-        df_products = pd.read_sql_query("SELECT barcode AS 'Barcode', name AS 'Όνομα Προϊόντος', rule_days AS 'Ημέρες Κανόνα', department AS 'Τμήμα' FROM products", conn)
-        if not df_products.empty:
-            st.dataframe(df_products, use_container_width=True)
-            st.caption(f"Συνολικά προϊόντα στη βάση: {len(df_products)}")
-        else:
-            st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα.")
-    except Exception as e:
-        st.error(f"Σφάλμα ανάγνωσης λίστας: {e}")
+                    st.success("Το προϊόν αποθηκεύτηκε στη βάση και προστέθηκε
