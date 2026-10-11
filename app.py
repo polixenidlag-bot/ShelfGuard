@@ -386,37 +386,34 @@ with tab1:
 # TAB 2: ΛΙΣΤΑ ΠΡΟΪΟΝΤΩΝ
 # ----------------------------------------------------
 with tab2:
-    st.subheader("📦 Διαχείριση Βάσης Προϊόντων")
+    st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
+    st.caption("Σκανάρετε ή πληκτρολογήστε barcode για να προσθέσετε προϊόν στη βάση δεδομένων χωρίς να μπει στις αποσύρσεις.")
     
-    # ➕ Φόρμα προσθήκης στη βάση με σάρωση Barcode
-    with st.expander("➕ Προσθήκη Νέου Προϊόντος στη Βάση"):
-        st.caption("Σκανάρετε ή πληκτρολογήστε barcode για να προσθέσετε προϊόν στη βάση δεδομένων χωρίς να μπει στις αποσύρσεις.")
-        
-        db_scanned = qrcode_scanner(key='db_barcode_scanner')
+    db_scanned = qrcode_scanner(key='db_barcode_scanner')
 
-        if not db_scanned:
-            db_barcode = st.text_input("Ή πληκτρολογήστε χειροκίνητα το Barcode:", key="db_manual_bc", placeholder="π.χ. 520101...")
+    if not db_scanned:
+        db_barcode = st.text_input("Ή πληκτρολογήστε χειροκίνητα το Barcode:", key="db_manual_bc", placeholder="π.χ. 520101...")
+    else:
+        db_barcode = db_scanned
+
+    if db_barcode:
+        st.info(f"Ενεργό Barcode: **{db_barcode}**")
+
+    db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
+    db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
+    db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
+    
+    if st.button("💾 Αποθήκευση Προϊόντος στη Βάση", key="save_db_only_btn", use_container_width=True):
+        if db_barcode and db_name:
+            c.execute("INSERT OR REPLACE INTO products (barcode, name, rule_days, department) VALUES (?, ?, ?, ?)",
+                      (db_barcode, db_name, db_rule, db_dept))
+            conn.commit()
+            st.success(f"Το προϊόν **{db_name}** αποθηκεύτηκε επιτυχώς στη βάση!")
+            st.rerun()
         else:
-            db_barcode = db_scanned
+            st.error("Παρακαλώ συμπληρώστε barcode και όνομα προϊόντος.")
 
-        if db_barcode:
-            st.info(f"Ενεργό Barcode: **{db_barcode}**")
-
-        db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
-        db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
-        db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
-        
-        if st.button("💾 Αποθήκευση Προϊόντος στη Βάση", key="save_db_only_btn", use_container_width=True):
-            if db_barcode and db_name:
-                c.execute("INSERT OR REPLACE INTO products (barcode, name, rule_days, department) VALUES (?, ?, ?, ?)",
-                          (db_barcode, db_name, db_rule, db_dept))
-                conn.commit()
-                st.success(f"Το προϊόν **{db_name}** αποθηκεύτηκε επιτυχώς στη βάση!")
-                st.rerun()
-            else:
-                st.error("Παρακαλώ συμπληρώστε barcode και όνομα προϊόντος.")
-
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br><hr><br>", unsafe_allow_html=True)
     st.subheader("📋 Λίστα Αποθηκευμένων Προϊόντων")
     
     try:
