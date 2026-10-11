@@ -56,10 +56,8 @@ st.divider()
 # ----------------------------------------------------
 st.subheader("📷 Σάρωση / Καταχώρηση Προϊόντος")
 
-# Κουμπί ενεργοποίησης κάμερας σαρωτή (διορθωμένο)
 scanned_code = qrcode_scanner(key='barcode_scanner')
 
-# Εναλλακτικά πεδίο χειροκίνητης πληκτρολόγησης αν δεν γίνει σάρωση
 if not scanned_code:
     scanned_code = st.text_input("Ή πληκτρολογήστε χειροκίνητα το Barcode:")
 
@@ -71,7 +69,8 @@ if scanned_code:
         prod_name, rule_days = product
         st.success(f"✅ Βρέθηκε: **{prod_name}** (Κανόνας: -{rule_days} ημέρες)")
         
-        expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today())
+        # Ημερομηνία Λήξης με μορφή ΗΗ/ΜΜ/ΕΕΕΕ
+        expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), format="DD/MM/YYYY")
         
         if st.button("➕ Προσθήκη στις Αποσύρσεις"):
             withdrawal_date = expiry_input - timedelta(days=rule_days)
@@ -87,7 +86,7 @@ if scanned_code:
         st.warning("⚠️ Νέο Προϊόν! Παρακαλώ καταχωρίστε τα στοιχεία του:")
         new_name = st.text_input("Όνομα Προϊόντος:")
         new_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7)
-        expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), key="new_exp")
+        expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), key="new_exp", format="DD/MM/YYYY")
         
         if st.button("💾 Αποθήκευση Προϊόντος & Καταχώρηση"):
             if new_name:
