@@ -131,6 +131,10 @@ DEPARTMENTS = [
     "Ψυγεία ΑΠΟΘΗΚΗ"
 ]
 
+# Αρχικοποίηση κατάστασης φίλτρου
+if "list_filter" not in st.session_state:
+    st.session_state.list_filter = "pending_all"
+
 # ----------------------------------------------------
 # TAB 1: ΣΑΡΩΣΗ & ΑΠΟΣΥΡΣΕΙΣ
 # ----------------------------------------------------
@@ -148,11 +152,18 @@ with tab1:
     c.execute("SELECT COUNT(*) FROM withdrawals WHERE department = ? AND status = 'Pending'", (selected_dept,))
     count_total_pending = c.fetchone()[0]
 
+    # Metrics & Clickable Quick Filters
     m1, m2 = st.columns(2)
     with m1:
         st.metric("🚨 Σημερινές Αποσύρσεις", count_today)
+        if st.button("🔍 Φίλτρο: Σημερινά", key="btn_f_today", use_container_width=True):
+            st.session_state.list_filter = "today"
+            st.rerun()
     with m2:
         st.metric("⏳ Εκκρεμείς Αποσύρσεις", count_total_pending)
+        if st.button("🔍 Φίλτρο: Εκκρεμείς", key="btn_f_pend", use_container_width=True):
+            st.session_state.list_filter = "pending_all"
+            st.rerun()
         
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -213,14 +224,27 @@ with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader(f"🚨 Λίστα Αποσύρσεων - {selected_dept}")
 
-    # --- ΟΡΓΑΝΩΜΕΝΕΣ ΕΝΕΡΓΕΙΕΣ & ΕΡΓΑΛΕΙΑ ---
+    # --- ΕΞΥΠΝΑ ΦΙΛΤΡΑ & ΕΡΓΑΛΕΙΑ ---
     with st.container():
-        col_search, col_hist = st.columns([2, 1])
+        col_search, col_fbtn = st.columns([2, 1])
         with col_search:
             search_query = st.text_input("🔍 Αναζήτηση προϊόντος...", key="search_w", placeholder="Γράψτε όνομα...")
-        with col_hist:
+        with col_fbtn:
             st.markdown("<br>", unsafe_allow_html=True)
-            show_history = st.checkbox("📂 Εμφάνιση Ιστορικού", key="show_hist_cb")
+            # Επιλογή προβολής φίλτρου
+            filter_mode = st.radio(
+                "Προβολή:",
+                ["⏳ Εκκρεμείς", "🚨 Σημερινά", "📂 Όλα/Ιστορικό"],
+                index=0 if st.session_state.list_filter == "pending_all" else (1 if st.session_state.list_filter == "today" else 2),
+                horizontal=True,
+                key="radio_filter_mode"
+            )
+            if filter_mode == "⏳ Εκκρεμείς":
+                st.session_state.list_filter = "pending_all"
+            elif filter_mode == "🚨 Σημερινά":
+                st.session_state.list_filter = "today"
+            else:
+                st.session_state.list_filter = "history"
 
     pending_df = pd.read_sql_query('''
         SELECT product_name, expiry_date, withdrawal_date, quantity 
@@ -278,29 +302,37 @@ with tab1:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    if show_history:
+    # Καθορισμός SQL ερωτήματος με βάση το επιλεγμένο φίλτρο
+    today = datetime.today().date()
+    if st.session_state.list_filter == "today":
+        query_str = '''
+            SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", quantity AS "Τεμάχια", status
+            FROM withdrawals
+            WHERE department = ? AND status = 'Pending' AND withdrawal_date = ?
+            ORDER BY withdrawal_date ASC
+        '''
+        df_withdrawals = pd.read_sql_query(query_str, conn, params=(selected_dept, today))
+    elif st.session_state.list_filter == "history":
         query_str = '''
             SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", quantity AS "Τεμάχια", status
             FROM withdrawals
             WHERE department = ?
             ORDER BY withdrawal_date ASC
         '''
-    else:
+        df_withdrawals = pd.read_sql_query(query_str, conn, params=(selected_dept,))
+    else:  # pending_all
         query_str = '''
             SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", quantity AS "Τεμάχια", status
             FROM withdrawals
             WHERE department = ? AND status = 'Pending'
             ORDER BY withdrawal_date ASC
         '''
-
-    df_withdrawals = pd.read_sql_query(query_str, conn, params=(selected_dept,))
+        df_withdrawals = pd.read_sql_query(query_str, conn, params=(selected_dept,))
 
     if search_query and not df_withdrawals.empty:
         df_withdrawals = df_withdrawals[df_withdrawals['Προϊόν'].str.contains(search_query, case=False, na=False)]
 
     if not df_withdrawals.empty:
-        today = datetime.today().date()
-        
         for index, row in df_withdrawals.iterrows():
             w_date = datetime.strptime(str(row['Απόσυρση']), "%Y-%m-%d").date()
             exp_date = datetime.strptime(str(row['Λήξη']), "%Y-%m-%d").date()
@@ -353,7 +385,7 @@ with tab1:
                             conn.commit()
                             st.rerun()
     else:
-        st.info("Δεν βρέθηκαν προϊόντα στη λίστα για αυτό το τμήμα.")
+        st.info("Δεν βρέθηκαν προϊόντα στη λίστα για αυτό το φίλτρο/τμήμα.")
 
 # ----------------------------------------------------
 # TAB 2: ΛΙΣΤΑ ΠΡΟΪΟΝΤΩΝ
