@@ -117,4 +117,120 @@ with tab1:
                         VALUES (?, ?, ?, ?, ?)
                     ''', (selected_dept, scanned_code, new_name, expiry_input, withdrawal_date))
                     conn.commit()
-                    st.success("Το προϊόν αποθηκεύτηκε στη βάση και προστέθηκε
+                    st.success("Το προϊόν αποθηκεύτηκε στη βάση και προστέθηκε στις αποσύρσεις!")
+                    st.rerun()
+                else:
+                    st.error("Παρακαλώ συμπληρώστε το όνομα του προϊόντος.")
+
+    st.divider()
+    st.subheader(f"🚨 Λίστα Αποσύρσεων - {selected_dept}")
+
+    # --- 1. Εργαλεία: Αναζήτηση & Ιστορικό ---
+    col_search, col_hist = st.columns([2, 1])
+    with col_search:
+        search_query = st.text_input("🔍 Αναζήτηση προϊόντος...", key="search_w", placeholder="Γράψτε όνομα...")
+    with col_hist:
+        show_history = st.checkbox("📂 Ιστορικό", key="show_hist_cb")
+
+    if show_history:
+        query_str = '''
+            SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", status
+            FROM withdrawals
+            WHERE department = ?
+            ORDER BY withdrawal_date ASC
+        '''
+    else:
+        query_str = '''
+            SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", status
+            FROM withdrawals
+            WHERE department = ? AND status = 'Pending'
+            ORDER BY withdrawal_date ASC
+        '''
+
+    df_withdrawals = pd.read_sql_query(query_str, conn, params=(selected_dept,))
+
+    if search_query and not df_withdrawals.empty:
+        df_withdrawals = df_withdrawals[df_withdrawals['Προϊόν'].str.contains(search_query, case=False, na=False)]
+
+    # --- 2. Κουμπί Ημερήσιας Αναφοράς για Viber ---
+    pending_df = pd.read_sql_query('''
+        SELECT product_name, expiry_date, withdrawal_date 
+        FROM withdrawals 
+        WHERE department = ? AND status = 'Pending' 
+        ORDER BY withdrawal_date ASC
+    ''', conn, params=(selected_dept,))
+
+    if not pending_df.empty:
+        with st.expander("📋 Δημιουργία Ημερήσιας Αναφοράς για Viber"):
+            report_lines = [f"📊 *ΑΝΑΦΟΡΑ ΑΠΟΣΥΡΣΕΩΝ* - *{selected_dept}*"]
+            report_lines.append(f"📅 Ημερομηνία: {datetime.today().strftime('%d/%m/%Y')}\n")
+            for _, r in pending_df.iterrows():
+                p_name = r['product_name']
+                exp_d = datetime.strptime(str(r['expiry_date']), "%Y-%m-%d").strftime("%d/%m/%Y")
+                w_d = datetime.strptime(str(r['withdrawal_date']), "%Y-%m-%d").strftime("%d/%m/%Y")
+                report_lines.append(f"• *{p_name}* | Λήξη: {exp_d} | Απόσυρση: {w_d}")
+            
+            report_text = "\n".join(report_lines)
+            st.text_area("Αντιγράψτε το κείμενο:", value=report_text, height=150, key="report_textarea")
+            st.caption("Μπορείτε να το αντιγράψετε και να το στείλετε απευθείας στο Viber!")
+
+    st.markdown("---")
+
+    if not df_withdrawals.empty:
+        today = datetime.today().date()
+        
+        for index, row in df_withdrawals.iterrows():
+            w_date = datetime.strptime(str(row['Απόσυρση']), "%Y-%m-%d").date()
+            exp_date = datetime.strptime(str(row['Λήξη']), "%Y-%m-%d").date()
+            status = row['status']
+            
+            w_date_str = w_date.strftime("%d/%m/%Y")
+            
+            if status == 'Done':
+                badge = "✅ ΟΛΟΚΛΗΡΩΘΗΚΕ"
+                color = "#888888"
+            elif w_date == today:
+                badge = "🚨 ΑΠΟΣΥΡΣΗ ΣΗΜΕΡΑ"
+                color = "#ff4b4b"
+            elif w_date == today + timedelta(days=1):
+                badge = "⚠️ ΑΠΟΣΥΡΣΗ ΑΥΡΙΟ"
+                color = "#ffa500"
+            else:
+                badge = "⏳ OK"
+                color = "#4caf50"
+                
+            col1, col2, col3 = st.columns([3, 2, 1])
+            with col1:
+                st.markdown(f"**{row['Προϊόν']}**")
+                st.caption(f"Λήξη: {exp_date.strftime('%d/%m/%Y')} | Απόσυρση: {w_date_str}")
+            with col2:
+                st.markdown(f"<span style='color:{color}; font-weight:bold;'>{badge}</span>", unsafe_allow_html=True)
+            with col3:
+                if status == 'Pending':
+                    if st.button("✔️", key=f"done_{row['id']}"):
+                        c.execute("UPDATE withdrawals SET status = 'Done' WHERE id = ?", (row['id'],))
+                        conn.commit()
+                        st.rerun()
+                else:
+                    if st.button("↩️", key=f"undo_{row['id']}"):
+                        c.execute("UPDATE withdrawals SET status = 'Pending' WHERE id = ?", (row['id'],))
+                        conn.commit()
+                        st.rerun()
+            st.markdown("---")
+    else:
+        st.info("Δεν βρέθηκαν προϊόντα στη λίστα για αυτό το τμήμα.")
+
+# ----------------------------------------------------
+# TAB 2: ΛΙΣΤΑ ΠΡΟΪΟΝΤΩΝ
+# ----------------------------------------------------
+with tab2:
+    st.subheader("📦 Όλα τα Αποθηκευμένα Προϊόντα")
+    try:
+        df_products = pd.read_sql_query("SELECT barcode AS 'Barcode', name AS 'Όνομα Προϊόντος', rule_days AS 'Ημέρες Κανόνα', department AS 'Τμήμα' FROM products", conn)
+        if not df_products.empty:
+            st.dataframe(df_products, use_container_width=True)
+            st.caption(f"Συνολικά προϊόντα στη βάση: {len(df_products)}")
+        else:
+            st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα.")
+    except Exception as e:
+        st.error(f"Σφάλμα ανάγνωσης λίστας: {e}")
