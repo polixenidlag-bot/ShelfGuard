@@ -14,10 +14,16 @@ c.execute('''
     CREATE TABLE IF NOT EXISTS products (
         barcode TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        rule_days INTEGER NOT NULL,
-        department TEXT
+        rule_days INTEGER NOT NULL
     )
 ''')
+
+# Αυτόματη προσθήκη στήλης department αν δεν υπάρχει
+try:
+    c.execute("ALTER TABLE products ADD COLUMN department TEXT")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass
 
 c.execute('''
     CREATE TABLE IF NOT EXISTS withdrawals (
@@ -155,12 +161,15 @@ with tab1:
 # ----------------------------------------------------
 with tab2:
     st.subheader("📦 Όλα τα Αποθηκευμένα Προϊόντα")
-    df_products = pd.read_sql_query("SELECT barcode AS 'Barcode', name AS 'Όνομα Προϊόντος', rule_days AS 'Ημέρες Κανόνα', department AS 'Τμήμα' FROM products", conn)
-    if not df_products.empty:
-        st.dataframe(df_products, use_container_width=True)
-        st.caption(f"Συνολικά προϊόντα στη βάση: {len(df_products)}")
-    else:
-        st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα. Μπορείτε να ανεβάσετε το αρχείο σας στο tab 'Μαζική Εισαγωγή Excel'.")
+    try:
+        df_products = pd.read_sql_query("SELECT barcode AS 'Barcode', name AS 'Όνομα Προϊόντος', rule_days AS 'Ημέρες Κανόνα', department AS 'Τμήμα' FROM products", conn)
+        if not df_products.empty:
+            st.dataframe(df_products, use_container_width=True)
+            st.caption(f"Συνολικά προϊόντα στη βάση: {len(df_products)}")
+        else:
+            st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα. Μπορείτε να ανεβάσετε το αρχείο σας στο tab 'Μαζική Εισαγωγή Excel'.")
+    except Exception as e:
+        st.error(f"Σφάλμα ανάγνωσης λίστας: {e}")
 
 # ----------------------------------------------------
 # TAB 3: ΜΑΖΙΚΗ ΕΙΣΑΓΩΓΗ EXCEL / CSV
@@ -186,11 +195,9 @@ with tab3:
             if st.button("🚀 Οριστική Εισαγωγή Προϊόντων στη Βάση"):
                 imported_count = 0
                 for _, row in df_import.iterrows():
-                    # Ανίχνευση στηλών με βάση τα ονόματα που έχετε στο sheet σας
                     bc = str(row.get('Barcode', row.iloc[0] if len(row) > 0 else '')).strip()
                     name = str(row.get('Όνομα Προϊόντος', row.iloc[1] if len(row) > 1 else '')).strip()
                     
-                    # Αναζήτηση στήλης ημερών κανόνα
                     rules_val = 7
                     for col in row.index:
                         if 'Ημέρες' in str(col) or 'Κανόνα' in str(col):
@@ -199,7 +206,6 @@ with tab3:
                             except:
                                 pass
                     
-                    # Αναζήτηση τμήματος
                     dept_val = "Ψυγείο 1: Γάλατα-Χυμοί"
                     for col in row.index:
                         if 'Τμήμα' in str(col):
