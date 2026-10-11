@@ -231,7 +231,6 @@ with tab1:
             search_query = st.text_input("🔍 Αναζήτηση προϊόντος...", key="search_w", placeholder="Γράψτε όνομα...")
         with col_fbtn:
             st.markdown("<br>", unsafe_allow_html=True)
-            # Επιλογή προβολής φίλτρου
             filter_mode = st.radio(
                 "Προβολή:",
                 ["⏳ Εκκρεμείς", "🚨 Σημερινά", "📂 Όλα/Ιστορικό"],
@@ -266,7 +265,6 @@ with tab1:
             
             report_text = "\n".join(report_lines)
             
-            # 1. Κουμπί Λήψης ως Αρχείο .txt
             st.download_button(
                 label="📥 Λήψη Αναφοράς ως Αρχείο (.txt)",
                 data=report_text,
@@ -275,7 +273,6 @@ with tab1:
                 use_container_width=True
             )
             
-            # 2. Κουμπί Native Share
             safe_text = report_text.replace('\n', '\\n').replace('"', '\\"')
             share_html = f"""
             <div style="margin-top: 10px;">
@@ -302,7 +299,6 @@ with tab1:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Καθορισμός SQL ερωτήματος με βάση το επιλεγμένο φίλτρο
     today = datetime.today().date()
     if st.session_state.list_filter == "today":
         query_str = '''
@@ -320,7 +316,7 @@ with tab1:
             ORDER BY withdrawal_date ASC
         '''
         df_withdrawals = pd.read_sql_query(query_str, conn, params=(selected_dept,))
-    else:  # pending_all
+    else:
         query_str = '''
             SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", quantity AS "Τεμάχια", status
             FROM withdrawals
@@ -341,7 +337,6 @@ with tab1:
             
             w_date_str = w_date.strftime("%d/%m/%Y")
             
-            # --- ΧΡΩΜΑΤΙΚΗ ΛΟΓΙΚΗ STATUS ---
             if status == 'Done':
                 badge = "✅ ΟΛΟΚΛΗΡΩΘΗΚΕ"
                 badge_bg = "#f1f5f9"
@@ -391,7 +386,36 @@ with tab1:
 # TAB 2: ΛΙΣΤΑ ΠΡΟΪΟΝΤΩΝ
 # ----------------------------------------------------
 with tab2:
-    st.subheader("📦 Όλα τα Αποθηκευμένα Προϊόντα")
+    st.subheader("📦 Διαχείριση Βάσης Προϊόντων")
+    
+    # ➕ Νέα φόρμα απευθείας προσθήκης στη βάση (χωρίς απόσυρση)
+    with st.expander("➕ Προσθήκη Νέου Προϊόντος στη Βάση"):
+        st.caption("Καταχωρίστε εδώ προϊόντα στη βάση δεδομένων (με barcode, όνομα και ημέρες κανόνα) χωρίς να μπουν αυτόματα στις αποσύρσεις.")
+        
+        db_scanned = qrcode_scanner(key='db_scanner')
+        if not db_scanned:
+            db_barcode = st.text_input("Barcode Προϊόντος:", key="db_bc_input", placeholder="π.χ. 520101...")
+        else:
+            db_barcode = db_scanned
+            st.info(f"Σαρώθηκε Barcode: {db_barcode}")
+            
+        db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
+        db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
+        db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
+        
+        if st.button("💾 Αποθήκευση Προϊόντος στη Βάση", key="save_db_only_btn", use_container_width=True):
+            if db_barcode and db_name:
+                c.execute("INSERT OR REPLACE INTO products (barcode, name, rule_days, department) VALUES (?, ?, ?, ?)",
+                          (db_barcode, db_name, db_rule, db_dept))
+                conn.commit()
+                st.success(f"Το προϊόν **{db_name}** αποθηκεύτηκε επιτυχώς στη βάση!")
+                st.rerun()
+            else:
+                st.error("Παρακαλώ συμπληρώστε barcode και όνομα προϊόντος.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("📋 Λίστα Αποθηκευμένων Προϊόντων")
+    
     try:
         df_products = pd.read_sql_query("SELECT barcode AS 'Barcode', name AS 'Όνομα Προϊόντος', rule_days AS 'Ημέρες Κανόνα', department AS 'Τμήμα' FROM products", conn)
         if not df_products.empty:
