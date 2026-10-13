@@ -1,2 +1,4 @@
 streamlit-qrcode-scanner
-openpyxl
+streamlit-gsheets
+pandas
+qrcode
