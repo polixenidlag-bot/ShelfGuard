@@ -1,49 +1,20 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
 from datetime import datetime, timedelta
 from streamlit_qrcode_scanner import qrcode_scanner
+from streamlit_gsheets import GSheetsConnection
 
 # ----------------------------------------------------
-# 1. ΡΥΘΜΙΣΗ ΒΑΣΗΣ ΔΕΔΟΜΕΝΩΝ (SQLITE)
+# 1. ΣΥΝΔΕΣΗ ΜΕ GOOGLE SHEETS
 # ----------------------------------------------------
-conn = sqlite3.connect("inventory.db", check_same_thread=False)
-c = conn.cursor()
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-c.execute('''
-    CREATE TABLE IF NOT EXISTS products (
-        barcode TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        rule_days INTEGER NOT NULL
-    )
-''')
-
-try:
-    c.execute("ALTER TABLE products ADD COLUMN department TEXT")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass
-
-c.execute('''
-    CREATE TABLE IF NOT EXISTS withdrawals (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        department TEXT NOT NULL,
-        barcode TEXT NOT NULL,
-        product_name TEXT NOT NULL,
-        expiry_date DATE NOT NULL,
-        withdrawal_date DATE NOT NULL,
-        quantity INTEGER DEFAULT 1,
-        status TEXT DEFAULT 'Pending'
-    )
-''')
-
-try:
-    c.execute("ALTER TABLE withdrawals ADD COLUMN quantity INTEGER DEFAULT 1")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass
-
-conn.commit()
+def load_data(worksheet_name):
+    try:
+        df = conn.read(worksheet=worksheet_name, ttl=0)
+        return df.dropna(how="all")
+    except Exception:
+        return pd.DataFrame()
 
 # ----------------------------------------------------
 # 2. UI & REFINED BACKGROUND CSS
@@ -52,17 +23,14 @@ st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
 st.markdown("""
 <style>
-/* Απόκρυψη Streamlit Header/Footer/Menu */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
 
-/* Όμορφο, καθαρό και απαλό φόντο */
 .stApp {
     background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
 }
 
-/* Κάρτες / Containers: Λευκό φόντο με απαλή σκιά */
 div[data-testid="stVerticalBlock"] > div[style*="border"] {
     background: #ffffff !important;
     border-radius: 16px !important;
@@ -71,7 +39,6 @@ div[data-testid="stVerticalBlock"] > div[style*="border"] {
     border: 1px solid rgba(203, 213, 225, 0.6) !important;
 }
 
-/* Κουμπιά με έντονο χρώμα */
 .stButton>button {
     border-radius: 12px;
     font-weight: 700;
@@ -87,7 +54,6 @@ div[data-testid="stVerticalBlock"] > div[style*="border"] {
     box-shadow: 0 6px 16px rgba(2, 132, 199, 0.4);
 }
 
-/* Custom Tabs Styling */
 .stTabs [data-baseweb="tab-list"] {
     gap: 10px;
     background-color: transparent;
@@ -105,7 +71,6 @@ div[data-testid="stVerticalBlock"] > div[style*="border"] {
     color: #ffffff !important;
 }
 
-/* Metric boxes custom look */
 div[data-testid="stMetric"] {
     background-color: #ffffff;
     padding: 15px;
@@ -116,11 +81,9 @@ div[data-testid="stMetric"] {
 </style>
 """, unsafe_allow_html=True)
 
-# 🧊 Τίτλος ShelfGuard μεγάλος και ψηλά
 st.markdown("<h1 style='text-align: center; color: #0284c7; font-weight: 900; font-size: 38px; margin-top: -10px; margin-bottom: 0px;'>🧊 ShelfGuard</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #1e293b; font-size: 13px; font-weight: 800; letter-spacing: 0.5px; margin-top: 5px; margin-bottom: 20px;'>ΣΥΣΤΗΜΑ ΑΣΦΑΛΟΥΣ ΕΛΕΓΧΟΥ ΗΜΕΡΟΜΗΝΙΩΝ ΚΑΙ ΑΠΟΣΥΡΣΕΩΝ</p>", unsafe_allow_html=True)
 
-# Tabs πλοήγησης
 tab1, tab2 = st.tabs(["📷 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
 DEPARTMENTS = [
@@ -135,6 +98,12 @@ if "list_filter" not in st.session_state:
     st.session_state.list_filter = "pending_all"
 
 # ----------------------------------------------------
+# ΦΟΡΤΩΣΗ ΔΕΔΟΜΕΝΩΝ ΑΠΟ GOOGLE SHEETS
+# ----------------------------------------------------
+df_products = load_data("products")
+df_withdrawals = load_data("withdrawals")
+
+# ----------------------------------------------------
 # TAB 1: ΣΑΡΩΣΗ & ΑΠΟΣΥΡΣΕΙΣ
 # ----------------------------------------------------
 with tab1:
@@ -143,13 +112,18 @@ with tab1:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # --- Υπολογισμός Metrics ---
     today_metric_date = datetime.today().date()
-    c.execute("SELECT COUNT(*) FROM withdrawals WHERE department = ? AND status = 'Pending' AND withdrawal_date = ?", (selected_dept, today_metric_date))
-    count_today = c.fetchone()[0]
     
-    c.execute("SELECT COUNT(*) FROM withdrawals WHERE department = ? AND status = 'Pending'", (selected_dept,))
-    count_total_pending = c.fetchone()[0]
+    count_today = 0
+    count_total_pending = 0
+    
+    if not df_withdrawals.empty and all(col in df_withdrawals.columns for col in ['department', 'status', 'withdrawal_date']):
+        dept_w = df_withdrawals[df_withdrawals['department'] == selected_dept]
+        pending_w = dept_w[dept_w['status'] == 'Pending']
+        count_total_pending = len(pending_w)
+        if 'withdrawal_date' in pending_w.columns:
+            today_str = today_metric_date.strftime("%Y-%m-%d")
+            count_today = len(pending_w[pending_w['withdrawal_date'].astype(str).str.startswith(today_str)])
 
     m1, m2 = st.columns(2)
     with m1:
@@ -168,7 +142,6 @@ with tab1:
     with st.container():
         st.subheader("📦 Καταχώρηση / Σάρωση Προϊόντος")
         
-        # Κουμπί ενεργοποίησης scanner (AppSheet Style)
         use_scanner_tab1 = st.toggle("📷 Ενεργοποίηση Scanner Κάμερας", key="toggle_scan_tab1")
         
         scanned_code = None
@@ -179,26 +152,33 @@ with tab1:
         active_code = scanned_code if scanned_code else manual_code
 
         if active_code:
-            c.execute("SELECT name, rule_days FROM products WHERE barcode = ?", (active_code,))
-            product = c.fetchone()
+            product_row = None
+            if not df_products.empty and 'barcode' in df_products.columns:
+                match = df_products[df_products['barcode'].astype(str) == str(active_code)]
+                if not match.empty:
+                    product_row = match.iloc[0]
             
-            if product:
-                prod_name, rule_days = product
+            if product_row is not None:
+                prod_name = product_row['name']
+                rule_days = int(product_row['rule_days'])
                 st.success(f"✅ Βρέθηκε: **{prod_name}** (Κανόνας: -{rule_days} ημέρες)")
-                
-                c.execute("UPDATE products SET department = ? WHERE barcode = ?", (selected_dept, active_code))
-                conn.commit()
                 
                 expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), format="DD/MM/YYYY", key="exp_date_1")
                 qty_input = st.number_input("📦 Τεμάχια (Προαιρετικό):", min_value=1, value=1, key="qty_input_1")
                 
                 if st.button("➕ Προσθήκη στις Αποσύρσεις", key="add_w_btn", use_container_width=True):
                     withdrawal_date = expiry_input - timedelta(days=rule_days)
-                    c.execute('''
-                        INSERT INTO withdrawals (department, barcode, product_name, expiry_date, withdrawal_date, quantity)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (selected_dept, active_code, prod_name, expiry_input, withdrawal_date, qty_input))
-                    conn.commit()
+                    new_row = pd.DataFrame([{
+                        "department": selected_dept,
+                        "barcode": active_code,
+                        "product_name": prod_name,
+                        "expiry_date": str(expiry_input),
+                        "withdrawal_date": str(withdrawal_date),
+                        "quantity": qty_input,
+                        "status": "Pending"
+                    }])
+                    updated_withdrawals = pd.concat([df_withdrawals, new_row], ignore_index=True) if not df_withdrawals.empty else new_row
+                    conn.update(worksheet="withdrawals", data=updated_withdrawals)
                     st.toast(f"Προστέθηκε το {prod_name} ({qty_input} τεμ.)!", icon="🎉")
                     st.rerun()
                     
@@ -211,16 +191,29 @@ with tab1:
                 
                 if st.button("💾 Αποθήκευση Προϊόντος & Καταχώρηση", key="save_new_btn", use_container_width=True):
                     if new_name:
-                        c.execute("INSERT OR REPLACE INTO products (barcode, name, rule_days, department) VALUES (?, ?, ?, ?)",
-                                  (active_code, new_name, new_rule, selected_dept))
+                        new_prod = pd.DataFrame([{
+                            "barcode": str(active_code),
+                            "name": new_name,
+                            "rule_days": new_rule,
+                            "department": selected_dept
+                        }])
+                        updated_prods = pd.concat([df_products, new_prod], ignore_index=True) if not df_products.empty else new_prod
+                        conn.update(worksheet="products", data=updated_prods)
                         
                         withdrawal_date = expiry_input - timedelta(days=new_rule)
-                        c.execute('''
-                            INSERT INTO withdrawals (department, barcode, product_name, expiry_date, withdrawal_date, quantity)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        ''', (selected_dept, active_code, new_name, expiry_input, withdrawal_date, qty_input_new))
-                        conn.commit()
-                        st.success("Το προϊόν αποθηκεύτηκε στη βάση και προστέθηκε στις αποσύρσεις!")
+                        new_w = pd.DataFrame([{
+                            "department": selected_dept,
+                            "barcode": active_code,
+                            "product_name": new_name,
+                            "expiry_date": str(expiry_input),
+                            "withdrawal_date": str(withdrawal_date),
+                            "quantity": qty_input_new,
+                            "status": "Pending"
+                        }])
+                        updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else new_w
+                        conn.update(worksheet="withdrawals", data=updated_w)
+                        
+                        st.success("Το προϊόν αποθηκεύτηκε στο Google Sheet και προστέθηκε στις αποσύρσεις!")
                         st.rerun()
                     else:
                         st.error("Παρακαλώ συμπληρώστε το όνομα του προϊόντος.")
@@ -228,7 +221,6 @@ with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader(f"🚨 Λίστα Αποσύρσεων - {selected_dept}")
 
-    # --- ΕΞΥΠΝΑ ΦΙΛΤΡΑ & ΕΡΓΑΛΕΙΑ ---
     with st.container():
         col_search, col_fbtn = st.columns([2, 1])
         with col_search:
@@ -249,107 +241,40 @@ with tab1:
             else:
                 st.session_state.list_filter = "history"
 
-    pending_df = pd.read_sql_query('''
-        SELECT product_name, expiry_date, withdrawal_date, quantity 
-        FROM withdrawals 
-        WHERE department = ? AND status = 'Pending' 
-        ORDER BY withdrawal_date ASC
-    ''', conn, params=(selected_dept,))
+    current_dept_w = pd.DataFrame()
+    if not df_withdrawals.empty and 'department' in df_withdrawals.columns:
+        current_dept_w = df_withdrawals[df_withdrawals['department'] == selected_dept].copy()
 
-    if not pending_df.empty:
-        with st.expander("📤 Ενέργεια: Εξαγωγή & Κοινή Χρήση Αναφοράς"):
-            report_lines = [f"📊 *ΑΝΑΦΟΡΑ ΑΠΟΣΥΡΣΕΩΝ* - *{selected_dept}*"]
-            report_lines.append(f"📅 Ημερομηνία: {datetime.today().strftime('%d/%m/%Y')}\n")
-            for _, r in pending_df.iterrows():
-                p_name = r['product_name']
-                exp_d = datetime.strptime(str(r['expiry_date']), "%Y-%m-%d").strftime("%d/%m/%Y")
-                w_d = datetime.strptime(str(r['withdrawal_date']), "%Y-%m-%d").strftime("%d/%m/%Y")
-                qty = r['quantity'] if 'quantity' in r and pd.notnull(r['quantity']) else 1
-                report_lines.append(f"• *{p_name}* ({qty} τεμ.) | Λήξη: {exp_d} | Απόσυρση: {w_d}")
+        if st.session_state.list_filter == "today":
+            today_str = today_metric_date.strftime("%Y-%m-%d")
+            current_dept_w = current_dept_w[(current_dept_w['status'] == 'Pending') & (current_dept_w['withdrawal_date'].astype(str).str.startswith(today_str))]
+        elif st.session_state.list_filter == "pending_all":
+            current_dept_w = current_dept_w[current_dept_w['status'] == 'Pending']
+        
+        if search_query:
+            current_dept_w = current_dept_w[current_dept_w['product_name'].str.contains(search_query, case=False, na=False)]
+
+    if not current_dept_w.empty:
+        for idx, row in current_dept_w.iterrows():
+            try:
+                w_date = datetime.strptime(str(row['withdrawal_date'])[:10], "%Y-%m-%d").date()
+                exp_date = datetime.strptime(str(row['expiry_date'])[:10], "%Y-%m-%d").date()
+            except:
+                continue
             
-            report_text = "\n".join(report_lines)
-            
-            st.download_button(
-                label="📥 Λήψη Αναφοράς ως Αρχείο (.txt)",
-                data=report_text,
-                file_name=f"Anofora_Aposyrsewn_{datetime.today().strftime('%Y-%m-%d')}.txt",
-                mime="text/plain",
-                use_container_width=True
-            )
-            
-            safe_text = report_text.replace('\n', '\\n').replace('"', '\\"')
-            share_html = f"""
-            <div style="margin-top: 10px;">
-                <button onclick="shareText()" style="width: 100%; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 15px; cursor: pointer; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);">
-                    🚀 Άμεση Κοινή Χρήση (Viber, WhatsApp, Email...)
-                </button>
-            </div>
-            <script>
-            function shareText() {{
-                const text = "{safe_text}";
-                if (navigator.share) {{
-                    navigator.share({{
-                        title: 'Αναφορά Αποσύρσεων',
-                        text: text
-                    }}).catch(console.error);
-                }} else {{
-                    navigator.clipboard.writeText(text);
-                    alert('Το κείμενο αντιγράφηκε στο πρόχειρο!');
-                }}
-            }}
-            </script>
-            """
-            st.components.v1.html(share_html, height=55)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    today = datetime.today().date()
-    if st.session_state.list_filter == "today":
-        query_str = '''
-            SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", quantity AS "Τεμάχια", status
-            FROM withdrawals
-            WHERE department = ? AND status = 'Pending' AND withdrawal_date = ?
-            ORDER BY withdrawal_date ASC
-        '''
-        df_withdrawals = pd.read_sql_query(query_str, conn, params=(selected_dept, today))
-    elif st.session_state.list_filter == "history":
-        query_str = '''
-            SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", quantity AS "Τεμάχια", status
-            FROM withdrawals
-            WHERE department = ?
-            ORDER BY withdrawal_date ASC
-        '''
-        df_withdrawals = pd.read_sql_query(query_str, conn, params=(selected_dept,))
-    else:
-        query_str = '''
-            SELECT id, product_name AS "Προϊόν", expiry_date AS "Λήξη", withdrawal_date AS "Απόσυρση", quantity AS "Τεμάχια", status
-            FROM withdrawals
-            WHERE department = ? AND status = 'Pending'
-            ORDER BY withdrawal_date ASC
-        '''
-        df_withdrawals = pd.read_sql_query(query_str, conn, params=(selected_dept,))
-
-    if search_query and not df_withdrawals.empty:
-        df_withdrawals = df_withdrawals[df_withdrawals['Προϊόν'].str.contains(search_query, case=False, na=False)]
-
-    if not df_withdrawals.empty:
-        for index, row in df_withdrawals.iterrows():
-            w_date = datetime.strptime(str(row['Απόσυρση']), "%Y-%m-%d").date()
-            exp_date = datetime.strptime(str(row['Λήξη']), "%Y-%m-%d").date()
-            qty = row['Τεμάχια'] if pd.notnull(row['Τεμάχια']) else 1
+            qty = row['quantity'] if pd.notnull(row['quantity']) else 1
             status = row['status']
-            
             w_date_str = w_date.strftime("%d/%m/%Y")
             
             if status == 'Done':
                 badge = "✅ ΟΛΟΚΛΗΡΩΘΗΚΕ"
                 badge_bg = "#f1f5f9"
                 badge_color = "#64748b"
-            elif w_date < today:
+            elif w_date < today_metric_date:
                 badge = "🔴 ΕΧΕΙ ΠΕΡΑΣΕΙ Η ΗΜΕΡΟΜΗΝΙΑ"
                 badge_bg = "#fee2e2"
                 badge_color = "#991b1b"
-            elif w_date == today or w_date == today + timedelta(days=1):
+            elif w_date == today_metric_date or w_date == today_metric_date + timedelta(days=1):
                 badge = "🟠 ΑΠΟΣΥΡΣΗ ΣΗΜΕΡΑ/ΑΜΕΣΑ"
                 badge_bg = "#ffedd5"
                 badge_color = "#c2410c"
@@ -361,7 +286,7 @@ with tab1:
             with st.container():
                 col1, col2, col3 = st.columns([3, 2, 1])
                 with col1:
-                    st.markdown(f"<div style='font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 6px;'>{row['Προϊόν']} <span style='font-size: 14px; color: #0284c7; font-weight: 600;'>({qty} τεμ.)</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 6px;'>{row['product_name']} <span style='font-size: 14px; color: #0284c7; font-weight: 600;'>({qty} τεμ.)</span></div>", unsafe_allow_html=True)
                     st.markdown(
                         f"<div style='line-height: 1.6;'>"
                         f"<span style='background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 6px; font-size: 15px; font-weight: 800;'>🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')}</span>"
@@ -374,14 +299,14 @@ with tab1:
                     st.markdown(f"<div style='font-size: 11px; font-weight: 700; background: {badge_bg}; color: {badge_color}; padding: 6px 10px; border-radius: 8px; text-align: center;'>{badge}</div>", unsafe_allow_html=True)
                 with col3:
                     if status == 'Pending':
-                        if st.button("✔️", key=f"done_{row['id']}"):
-                            c.execute("UPDATE withdrawals SET status = 'Done' WHERE id = ?", (row['id'],))
-                            conn.commit()
+                        if st.button("✔️", key=f"done_{idx}"):
+                            df_withdrawals.loc[idx, 'status'] = 'Done'
+                            conn.update(worksheet="withdrawals", data=df_withdrawals)
                             st.rerun()
                     else:
-                        if st.button("↩️", key=f"undo_{row['id']}"):
-                            c.execute("UPDATE withdrawals SET status = 'Pending' WHERE id = ?", (row['id'],))
-                            conn.commit()
+                        if st.button("↩️", key=f"undo_{idx}"):
+                            df_withdrawals.loc[idx, 'status'] = 'Pending'
+                            conn.update(worksheet="withdrawals", data=df_withdrawals)
                             st.rerun()
     else:
         st.info("Δεν βρέθηκαν προϊόντα στη λίστα για αυτό το φίλτρο/τμήμα.")
@@ -391,9 +316,8 @@ with tab1:
 # ----------------------------------------------------
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
-    st.caption("Πληκτρολογήστε το barcode ή ενεργοποιήστε το scanner κάμερας για να αποθηκεύσετε νέο προϊόν στη βάση.")
+    st.caption("Πληκτρολογήστε το barcode ή ενεργοποιήστε το scanner κάμερας για να αποθηκεύσετε νέο προϊόν στο Google Sheet.")
     
-    # Κουμπί ενεργοποίησης scanner (AppSheet Style)
     use_scanner_tab2 = st.toggle("📷 Ενεργοποίηση Scanner Κάμερας", key="toggle_scan_tab2")
     
     db_scanned = None
@@ -401,34 +325,4 @@ with tab2:
         db_scanned = qrcode_scanner(key='barcode_scanner_tab2')
         
     db_barcode_input = st.text_input("Barcode Προϊόντος (ή πληκτρολογήστε):", key="db_manual_bc", placeholder="π.χ. 520101...", value=db_scanned if db_scanned else "")
-    db_barcode = db_scanned if db_scanned else db_barcode_input
-
-    if db_barcode:
-        st.info(f"Ενεργό Barcode: **{db_barcode}**")
-
-    db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
-    db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
-    db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
-    
-    if st.button("💾 Αποθήκευση Προϊόντος στη Βάση", key="save_db_only_btn", use_container_width=True):
-        if db_barcode and db_name:
-            c.execute("INSERT OR REPLACE INTO products (barcode, name, rule_days, department) VALUES (?, ?, ?, ?)",
-                      (db_barcode, db_name, db_rule, db_dept))
-            conn.commit()
-            st.success(f"Το προϊόν **{db_name}** αποθηκεύτηκε επιτυχώς στη βάση!")
-            st.rerun()
-        else:
-            st.error("Παρακαλώ συμπληρώστε barcode και όνομα προϊόντος.")
-
-    st.markdown("<br><hr><br>", unsafe_allow_html=True)
-    st.subheader("📋 Λίστα Αποθηκευμένων Προϊόντων")
-    
-    try:
-        df_products = pd.read_sql_query("SELECT barcode AS 'Barcode', name AS 'Όνομα Προϊόντος', rule_days AS 'Ημέρες Κανόνα', department AS 'Τμήμα' FROM products", conn)
-        if not df_products.empty:
-            st.dataframe(df_products, use_container_width=True)
-            st.caption(f"Συνολικά προϊόντα στη βάση: {len(df_products)}")
-        else:
-            st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα.")
-    except Exception as e:
-        st.error(f"Σφάλμα ανάγνωσης λίστας: {e}")
+    db_barcode = db_scanned if db_scanned else db
