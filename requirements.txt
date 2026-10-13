@@ -1,4 +1,4 @@
 streamlit
 pandas
-qrcode
 streamlit-gsheets
+streamlit-qrcode-scanner
