@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from streamlit_qrcode_scanner import qrcode_scanner
 from streamlit_gsheets import GSheetsConnection
 
 # ----------------------------------------------------
@@ -84,7 +83,7 @@ div[data-testid="stMetric"] {
 st.markdown("<h1 style='text-align: center; color: #0284c7; font-weight: 900; font-size: 38px; margin-top: -10px; margin-bottom: 0px;'>🧊 ShelfGuard</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #1e293b; font-size: 13px; font-weight: 800; letter-spacing: 0.5px; margin-top: 5px; margin-bottom: 20px;'>ΣΥΣΤΗΜΑ ΑΣΦΑΛΟΥΣ ΕΛΕΓΧΟΥ ΗΜΕΡΟΜΗΝΙΩΝ ΚΑΙ ΑΠΟΣΥΡΣΕΩΝ</p>", unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["📷 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
+tab1, tab2 = st.tabs(["📋 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
 DEPARTMENTS = [
     "Ψυγείο 1: Γάλατα-Χυμοί",
@@ -97,9 +96,7 @@ DEPARTMENTS = [
 if "list_filter" not in st.session_state:
     st.session_state.list_filter = "pending_all"
 
-# ----------------------------------------------------
 # ΦΟΡΤΩΣΗ ΔΕΔΟΜΕΝΩΝ ΑΠΟ GOOGLE SHEETS
-# ----------------------------------------------------
 df_products = load_data("products")
 df_withdrawals = load_data("withdrawals")
 
@@ -113,7 +110,6 @@ with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
     
     today_metric_date = datetime.today().date()
-    
     count_today = 0
     count_total_pending = 0
     
@@ -140,16 +136,9 @@ with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
 
     with st.container():
-        st.subheader("📦 Καταχώρηση / Σάρωση Προϊόντος")
+        st.subheader("📦 Καταχώρηση Προϊόντος")
         
-        use_scanner_tab1 = st.toggle("📷 Ενεργοποίηση Scanner Κάμερας", key="toggle_scan_tab1")
-        
-        scanned_code = None
-        if use_scanner_tab1:
-            scanned_code = qrcode_scanner(key='barcode_scanner_tab1')
-        
-        manual_code = st.text_input("Barcode Προϊόντος (ή πληκτρολογήστε):", key="manual_bc_tab1", placeholder="π.χ. 520101...", value=scanned_code if scanned_code else "")
-        active_code = scanned_code if scanned_code else manual_code
+        active_code = st.text_input("Barcode Προϊόντος:", key="manual_bc_tab1", placeholder="Πληκτρολογήστε ή σαρώστε barcode...")
 
         if active_code:
             product_row = None
@@ -170,7 +159,7 @@ with tab1:
                     withdrawal_date = expiry_input - timedelta(days=rule_days)
                     new_row = pd.DataFrame([{
                         "department": selected_dept,
-                        "barcode": active_code,
+                        "barcode": str(active_code),
                         "product_name": prod_name,
                         "expiry_date": str(expiry_input),
                         "withdrawal_date": str(withdrawal_date),
@@ -203,7 +192,7 @@ with tab1:
                         withdrawal_date = expiry_input - timedelta(days=new_rule)
                         new_w = pd.DataFrame([{
                             "department": selected_dept,
-                            "barcode": active_code,
+                            "barcode": str(active_code),
                             "product_name": new_name,
                             "expiry_date": str(expiry_input),
                             "withdrawal_date": str(withdrawal_date),
@@ -316,13 +305,32 @@ with tab1:
 # ----------------------------------------------------
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
-    st.caption("Πληκτρολογήστε το barcode ή ενεργοποιήστε το scanner κάμερας για να αποθηκεύσετε νέο προϊόν στο Google Sheet.")
     
-    use_scanner_tab2 = st.toggle("📷 Ενεργοποίηση Scanner Κάμερας", key="toggle_scan_tab2")
+    db_barcode = st.text_input("Barcode Προϊόντος:", key="db_manual_bc", placeholder="π.χ. 520101...")
+    db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
+    db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
+    db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
     
-    db_scanned = None
-    if use_scanner_tab2:
-        db_scanned = qrcode_scanner(key='barcode_scanner_tab2')
-        
-    db_barcode_input = st.text_input("Barcode Προϊόντος (ή πληκτρολογήστε):", key="db_manual_bc", placeholder="π.χ. 520101...", value=db_scanned if db_scanned else "")
-    db_barcode = db_scanned if db_scanned else db
+    if st.button("💾 Αποθήκευση Προϊόντος στη Βάση", key="save_db_only_btn", use_container_width=True):
+        if db_barcode and db_name:
+            new_prod = pd.DataFrame([{
+                "barcode": str(db_barcode),
+                "name": db_name,
+                "rule_days": db_rule,
+                "department": db_dept
+            }])
+            updated_prods = pd.concat([df_products, new_prod], ignore_index=True) if not df_products.empty else new_prod
+            conn.update(worksheet="products", data=updated_prods)
+            st.success(f"Το προϊόν **{db_name}** αποθηκεύτηκε επιτυχώς στο Google Sheet!")
+            st.rerun()
+        else:
+            st.error("Παρακαλώ συμπληρώστε barcode και όνομα προϊόντος.")
+
+    st.markdown("<br><hr><br>", unsafe_allow_html=True)
+    st.subheader("📋 Λίστα Αποθηκευμένων Προϊόντων")
+    
+    if not df_products.empty:
+        st.dataframe(df_products, use_container_width=True)
+        st.caption(f"Συνολικά προϊόντα στη βάση: {len(df_products)}")
+    else:
+        st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα στο Google Sheet.")
