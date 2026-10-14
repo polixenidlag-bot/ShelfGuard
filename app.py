@@ -11,13 +11,12 @@ SCOPE = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-@st.cache_resource
 def get_gsheet_client():
     try:
+        # Χωρίς cache για να διαβάζει πάντα τα νέα δεδομένα
         secrets = st.secrets["connections"]["gsheets"]
         secrets_dict = dict(secrets)
         
-        # Αυτόματος καθαρισμός και μορφοποίηση του κλειδιού
         if "private_key" in secrets_dict:
             raw_key = secrets_dict["private_key"]
             clean_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
