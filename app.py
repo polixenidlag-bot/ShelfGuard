@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_qrcode_scanner import qrcode_scanner
+import textwrap
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -14,10 +15,13 @@ SCOPE = [
 def get_gsheet_client():
     try:
         secrets_dict = dict(st.secrets["connections"]["gsheets"])
-        # Αυτόματη ένωση των δύο κομματιών του κλειδιού
-        secrets_dict["private_key"] = secrets_dict["private_key_part1"] + secrets_dict["private_key_part2"]
-        del secrets_dict["private_key_part1"]
-        del secrets_dict["private_key_part2"]
+        
+        # Αυτόματη επαναφορά και μορφοποίηση του κλειδιού σε γραμμές των 64 χαρακτήρων
+        raw_key = secrets_dict["private_key"]
+        clean_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+        clean_key = "".join(clean_key.split())
+        wrapped_key = "\n".join(textwrap.wrap(clean_key, 64))
+        secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{wrapped_key}\n-----END PRIVATE KEY-----\n"
         
         creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
