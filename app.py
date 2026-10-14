@@ -23,8 +23,12 @@ def get_gsheet_client():
             raw_key = raw_key.replace('“', '').replace('”', '').replace('"', '').replace("'", "")
             clean = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
             
-            # ΔΙΟΡΘΩΣΗ: Αφαιρέσαμε το '=' από το regex για να μην μπαίνει στη μέση των γραμμών
+            # Κρατάμε μόνο τους έγκυρους χαρακτήρες Base64
             clean = "".join(re.findall(r'[A-Za-z0-9+/]', clean))
+            
+            # ΔΙΟΡΘΩΣΗ: Προσθέτουμε ξανά το απαραίτητο padding '=' στο τέλος
+            padding_needed = (4 - len(clean) % 4) % 4
+            clean = clean + '=' * padding_needed
             
             # Τυποποίηση ακριβώς σε γραμμές 64 χαρακτήρων (όπως ορίζει το cryptography.io)
             wrapped = "\n".join(textwrap.wrap(clean, 64))
@@ -208,91 +212,4 @@ with tab1:
             horizontal=True,
             key="radio_filter_mode"
         )
-        if filter_mode == "⏳ Εκκρεμείς":
-            st.session_state.list_filter = "pending_all"
-        elif filter_mode == "🚨 Σημερινά":
-            st.session_state.list_filter = "today"
-        else:
-            st.session_state.list_filter = "history"
-
-    current_dept_w = pd.DataFrame()
-    if not df_withdrawals.empty and 'department' in df_withdrawals.columns:
-        current_dept_w = df_withdrawals[df_withdrawals['department'] == selected_dept].copy()
-
-        if st.session_state.list_filter == "today":
-            today_str = today_metric_date.strftime("%Y-%m-%d")
-            current_dept_w = current_dept_w[(current_dept_w['status'] == 'Pending') & (current_dept_w['withdrawal_date'].astype(str).str.startswith(today_str))]
-        elif st.session_state.list_filter == "pending_all":
-            current_dept_w = current_dept_w[current_dept_w['status'] == 'Pending']
-        
-        if search_query:
-            current_dept_w = current_dept_w[current_dept_w['product_name'].str.contains(search_query, case=False, na=False)]
-
-    if not current_dept_w.empty:
-        for idx, row in current_dept_w.iterrows():
-            try:
-                w_date = datetime.strptime(str(row['withdrawal_date'])[:10], "%Y-%m-%d").date()
-                exp_date = datetime.strptime(str(row['expiry_date'])[:10], "%Y-%m-%d").date()
-            except:
-                continue
-            
-            qty = row['quantity'] if pd.notnull(row['quantity']) else 1
-            status = row['status']
-            
-            with st.container():
-                st.write(f"**{row['product_name']}** ({qty} τεμ.)")
-                st.write(f"🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')} | ⏰ Απόσυρση: {w_date.strftime('%d/%m/%Y')}")
-                st.write(f"Κατάσταση: {status}")
-                
-                if status == 'Pending':
-                    if st.button("✔️ Ολοκλήρωση", key=f"done_{idx}"):
-                        df_withdrawals.loc[idx, 'status'] = 'Done'
-                        update_worksheet("Αποσύρσεις", df_withdrawals)
-                        st.rerun()
-                else:
-                    if st.button("↩️ Επαναφορά", key=f"undo_{idx}"):
-                        df_withdrawals.loc[idx, 'status'] = 'Pending'
-                        update_worksheet("Αποσύρσεις", df_withdrawals)
-                        st.rerun()
-                st.divider()
-    else:
-        st.info("Δεν βρέθηκαν προϊόντα.")
-
-with tab2:
-    st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
-    scan_mode_2 = st.radio("Τρόπος Εισαγωγής Barcode:", ["⌨️ Πληκτρολόγηση / Χειροκίνητα", "📷 Σάρωση με Κάμερα"], key="mode_2", horizontal=True)
-    
-    db_barcode = ""
-    if scan_mode_2 == "📷 Σάρωση με Κάμερα":
-        scanned_val_db = qrcode_scanner(key="scanner_tab2")
-        if scanned_val_db:
-            db_barcode = str(scanned_val_db)
-            st.success(f"Barcode: {db_barcode}")
-    else:
-        db_barcode = st.text_input("Barcode Προϊόντος:", key="db_manual_bc")
-
-    db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input")
-    db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
-    db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
-    
-    if st.button("💾 Αποθήκευση Προϊόντος", key="save_db_only_btn", use_container_width=True):
-        if db_barcode and db_name:
-            new_prod = pd.DataFrame([{
-                "barcode": str(db_barcode),
-                "name": db_name,
-                "rule_days": db_rule,
-                "department": db_dept
-            }])
-            updated_prods = pd.concat([df_products, new_prod], ignore_index=True) if not df_products.empty else new_prod
-            update_worksheet("Προϊόντα", updated_prods)
-            st.success("Αποθηκεύτηκε επιτυχώς!")
-            st.rerun()
-        else:
-            st.error("Συμπληρώστε barcode και όνομα.")
-
-    st.divider()
-    st.subheader("📋 Λίστα Αποθηκευμένων Προϊόντων")
-    if not df_products.empty:
-        st.dataframe(df_products, use_container_width=True)
-    else:
-        st.info("Δεν υπάρχουν προϊόντα ακόμα.")
+        if filter_mode == "
