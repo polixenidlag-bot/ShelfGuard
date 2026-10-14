@@ -1,20 +1,56 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from streamlit_gsheets import GSheetsConnection
+import gspread
+from google.oauth2.service_account import Credentials
 from streamlit_qrcode_scanner import qrcode_scanner
 
 # ----------------------------------------------------
-# 1. ΣΥΝΔΕΣΗ ΜΕ GOOGLE SHEETS
+# 1. ΑΣΦΑΛΗΣ ΣΥΝΔΕΣΗ ΜΕ GOOGLE SHEETS
 # ----------------------------------------------------
-conn = st.connection("gsheets", type=GSheetsConnection)
+SCOPE = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
+@st.cache_resource
+def get_gsheet_client():
+    try:
+        secrets_dict = dict(st.secrets["connections"]["gsheets"])
+        creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
+        client = gspread.authorize(creds)
+        return client
+    except Exception as e:
+        st.error(f"Σφάλμα σύνδεσης: {e}")
+        return None
+
+# Νέο Google Sheet που ζήτησες
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1DQHu9EFzWqKvK5e8E_lAcsnshEa1tskLhFDt5ruHOvY/edit?usp=drivesdk"
 
 def load_data(worksheet_name):
-    try:
-        df = conn.read(worksheet=worksheet_name, ttl=0)
-        return df.dropna(how="all")
-    except Exception:
-        return pd.DataFrame()
+    client = get_gsheet_client()
+    if client:
+        try:
+            sheet = client.open_by_url(SHEET_URL).worksheet(worksheet_name)
+            data = sheet.get_all_records()
+            return pd.DataFrame(data)
+        except Exception:
+            return pd.DataFrame()
+    return pd.DataFrame()
+
+def update_worksheet(worksheet_name, df):
+    client = get_gsheet_client()
+    if client:
+        try:
+            sheet = client.open_by_url(SHEET_URL).worksheet(worksheet_name)
+            sheet.clear()
+            df_to_save = df.fillna("")
+            sheet.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
+            return True
+        except Exception as e:
+            st.error(f"Σφάλμα αποθήκευσης: {e}")
+            return False
+    return False
 
 # ----------------------------------------------------
 # 2. UI & REFINED BACKGROUND CSS
@@ -178,7 +214,7 @@ with tab1:
                         "status": "Pending"
                     }])
                     updated_withdrawals = pd.concat([df_withdrawals, new_row], ignore_index=True) if not df_withdrawals.empty else new_row
-                    conn.update(worksheet="Αποσύρσεις", data=updated_withdrawals)
+                    update_worksheet("Αποσύρσεις", updated_withdrawals)
                     st.toast(f"Προστέθηκε το {prod_name} ({qty_input} τεμ.)!", icon="🎉")
                     st.rerun()
                     
@@ -198,7 +234,7 @@ with tab1:
                             "department": selected_dept
                         }])
                         updated_prods = pd.concat([df_products, new_prod], ignore_index=True) if not df_products.empty else new_prod
-                        conn.update(worksheet="Προϊόντα", data=updated_prods)
+                        update_worksheet("Προϊόντα", updated_prods)
                         
                         withdrawal_date = expiry_input - timedelta(days=new_rule)
                         new_w = pd.DataFrame([{
@@ -210,8 +246,8 @@ with tab1:
                             "quantity": qty_input_new,
                             "status": "Pending"
                         }])
-                        updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else updated_w
-                        conn.update(worksheet="Αποσύρσεις", data=updated_w)
+                        updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else new_w
+                        update_worksheet("Αποσύρσεις", updated_w)
                         
                         st.success("Το προϊόν αποθηκεύτηκε στο Google Sheet και προστέθηκε στις αποσύρσεις!")
                         st.rerun()
@@ -291,68 +327,4 @@ with tab1:
                         f"<div style='line-height: 1.6;'>"
                         f"<span style='background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 6px; font-size: 15px; font-weight: 800;'>🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')}</span>"
                         f"<br>"
-                        f"<span style='background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 6px; font-size: 16px; font-weight: 900;'>⏰ Απόσυρση: {w_date_str}</span>"
-                        f"</div>", 
-                        unsafe_allow_html=True
-                    )
-                with col2:
-                    st.markdown(f"<div style='font-size: 11px; font-weight: 700; background: {badge_bg}; color: {badge_color}; padding: 6px 10px; border-radius: 8px; text-align: center;'>{badge}</div>", unsafe_allow_html=True)
-                with col3:
-                    if status == 'Pending':
-                        if st.button("✔️", key=f"done_{idx}"):
-                            df_withdrawals.loc[idx, 'status'] = 'Done'
-                            conn.update(worksheet="Αποσύρσεις", data=df_withdrawals)
-                            st.rerun()
-                    else:
-                        if st.button("↩️", key=f"undo_{idx}"):
-                            df_withdrawals.loc[idx, 'status'] = 'Pending'
-                            conn.update(worksheet="Αποσύρσεις", data=df_withdrawals)
-                            st.rerun()
-    else:
-        st.info("Δεν βρέθηκαν προϊόντα στη λίστα για αυτό το φίλτρο/τμήμα.")
-
-# ----------------------------------------------------
-# TAB 2: ΛΙΣΤΑ ΠΡΟΪΟΝΤΩΝ
-# ----------------------------------------------------
-with tab2:
-    st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
-    
-    scan_mode_2 = st.radio("Τρόπος Εισαγωγής Barcode:", ["⌨️ Πληκτρολόγηση / Χειροκίνητα", "📷 Σάρωση με Κάμερα"], key="mode_2", horizontal=True)
-    
-    db_barcode = ""
-    if scan_mode_2 == "📷 Σάρωση με Κάμερα":
-        st.info("Ενεργοποίηση κάμερας για σάρωση νέου προϊόντος:")
-        scanned_val_db = qrcode_scanner(key="scanner_tab2")
-        if scanned_val_db:
-            db_barcode = str(scanned_val_db)
-            st.success(f"Barcode: **{db_barcode}**")
-    else:
-        db_barcode = st.text_input("Barcode Προϊόντος:", key="db_manual_bc", placeholder="π.χ. 520101...")
-
-    db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
-    db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
-    db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
-    
-    if st.button("💾 Αποθήκευση Προϊόντος στη Βάση", key="save_db_only_btn", use_container_width=True):
-        if db_barcode and db_name:
-            new_prod = pd.DataFrame([{
-                "barcode": str(db_barcode),
-                "name": db_name,
-                "rule_days": db_rule,
-                "department": db_dept
-            }])
-            updated_prods = pd.concat([df_products, new_prod], ignore_index=True) if not df_products.empty else new_prod
-            conn.update(worksheet="Προϊόντα", data=updated_prods)
-            st.success(f"Το προϊόν **{db_name}** αποθηκεύτηκε επιτυχώς στο Google Sheet!")
-            st.rerun()
-        else:
-            st.error("Παρακαλώ συμπληρώστε barcode και όνομα προϊόντος.")
-
-    st.markdown("<br><hr><br>", unsafe_allow_html=True)
-    st.subheader("📋 Λίστα Αποθηκευμένων Προϊόντων")
-    
-    if not df_products.empty:
-        st.dataframe(df_products, use_container_width=True)
-        st.caption(f"Συνολικά προϊόντα στη βάση: {len(df_products)}")
-    else:
-        st.info("Δεν υπάρχουν αποθηκευμένα προϊόντα ακόμα στο Google Sheet.")
+                        f"<span style
