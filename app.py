@@ -1,87 +1,20 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import gspread
-from google.oauth2.service_account import Credentials
-import textwrap
-import re
-
-SCOPE = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-
-def clean_private_key(key_str):
-    if not key_str:
-        return ""
-    key_str = str(key_str).strip()
-    key_str = key_str.replace("\\\\n", "\n").replace("\\n", "\n")
-    
-    match = re.search(r'-----BEGIN PRIVATE KEY-----(.*?)-----END PRIVATE KEY-----', key_str, re.DOTALL)
-    if match:
-        b64_data = match.group(1)
-    else:
-        b64_data = key_str.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
-    
-    # Καθαρισμός και διατήρηση μόνο εγκύρων χαρακτήρων base64
-    clean_chars = "".join(re.findall(r'[A-Za-z0-9+/]', b64_data))
-    
-    # Αυτόματο padding με '=' αν λείπει
-    padding_needed = len(clean_chars) % 4
-    if padding_needed:
-        clean_chars += '=' * (4 - padding_needed)
-        
-    wrapped = "\n".join(textwrap.wrap(clean_chars, 64))
-    return f"-----BEGIN PRIVATE KEY-----\n{wrapped}\n-----END PRIVATE KEY-----\n"
-
-def get_gsheet_client():
-    try:
-        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-            secrets_dict = dict(st.secrets["connections"]["gsheets"])
-        else:
-            secrets_dict = dict(st.secrets)
-            
-        if "private_key" in secrets_dict:
-            secrets_dict["private_key"] = clean_private_key(secrets_dict["private_key"])
-        
-        creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
-        client = gspread.authorize(creds)
-        return client
-    except Exception as e:
-        st.error(f"Σφάλμα σύνδεσης: {e}")
-        return None
-
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1DQHu9EFzWqKvK5e8E_lAcsnshEa1tskLhFDt5ruHOvY/edit?usp=drivesdk"
-
-def load_data(worksheet_name):
-    client = get_gsheet_client()
-    if client:
-        try:
-            sheet = client.open_by_url(SHEET_URL).worksheet(worksheet_name)
-            data = sheet.get_all_records()
-            return pd.DataFrame(data)
-        except Exception:
-            return pd.DataFrame()
-    return pd.DataFrame()
-
-def update_worksheet(worksheet_name, df):
-    client = get_gsheet_client()
-    if client:
-        try:
-            sheet = client.open_by_url(SHEET_URL).worksheet(worksheet_name)
-            sheet.clear()
-            df_to_save = df.fillna("")
-            sheet.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
-            return True
-        except Exception as e:
-            st.error(f"Σφάλμα αποθήκευσης: {e}")
-            return False
-    return False
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
-st.title("🧊 ShelfGuard")
+st.title("🧊 ShelfGuard (Τοπική Λειτουργία)")
 st.write("ΣΥΣΤΗΜΑ ΑΣΦΑΛΟΥΣ ΕΛΕΓΧΟΥ ΗΜΕΡΟΜΗΝΙΩΝ ΚΑΙ ΑΠΟΣΥΡΣΕΩΝ")
+
+# Αρχικοποίηση τοπικής μνήμης (Session State) αν δεν υπάρχουν δεδομένα
+if "products_db" not in st.session_state:
+    st.session_state.products_db = pd.DataFrame(columns=["barcode", "name", "rule_days", "department"])
+
+if "withdrawals_db" not in st.session_state:
+    st.session_state.withdrawals_db = pd.DataFrame(columns=[
+        "department", "barcode", "product_name", "expiry_date", "withdrawal_date", "quantity", "status"
+    ])
 
 tab1, tab2 = st.tabs(["📋 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
@@ -96,8 +29,8 @@ DEPARTMENTS = [
 if "list_filter" not in st.session_state:
     st.session_state.list_filter = "pending_all"
 
-df_products = load_data("Προϊόντα")
-df_withdrawals = load_data("Αποσύρσεις")
+df_products = st.session_state.products_db
+df_withdrawals = st.session_state.withdrawals_db
 
 with tab1:
     selected_dept = st.selectbox("📍 Επιλέξτε Τμήμα / Ψυγείο:", DEPARTMENTS, key="dept_tab1")
@@ -157,8 +90,7 @@ with tab1:
                     "quantity": qty_input,
                     "status": "Pending"
                 }])
-                updated_withdrawals = pd.concat([df_withdrawals, new_row], ignore_index=True) if not df_withdrawals.empty else new_row
-                update_worksheet("Αποσύρσεις", updated_withdrawals)
+                st.session_state.withdrawals_db = pd.concat([st.session_state.withdrawals_db, new_row], ignore_index=True)
                 st.success("Προστέθηκε επιτυχώς!")
                 st.rerun()
                 
@@ -177,8 +109,7 @@ with tab1:
                         "rule_days": new_rule,
                         "department": selected_dept
                     }])
-                    updated_prods = pd.concat([df_products, new_prod], ignore_index=True) if not df_products.empty else new_prod
-                    update_worksheet("Προϊόντα", updated_prods)
+                    st.session_state.products_db = pd.concat([st.session_state.products_db, new_prod], ignore_index=True)
                     
                     withdrawal_date = expiry_input - timedelta(days=new_rule)
                     new_w = pd.DataFrame([{
@@ -190,8 +121,7 @@ with tab1:
                         "quantity": qty_input_new,
                         "status": "Pending"
                     }])
-                    updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else new_w
-                    update_worksheet("Αποσύρσεις", updated_w)
+                    st.session_state.withdrawals_db = pd.concat([st.session_state.withdrawals_db, new_w], ignore_index=True)
                     
                     st.success("Αποθηκεύτηκε επιτυχώς!")
                     st.rerun()
@@ -220,8 +150,9 @@ with tab1:
             st.session_state.list_filter = "history"
 
     current_dept_w = pd.DataFrame()
-    if not df_withdrawals.empty and 'department' in df_withdrawals.columns:
-        current_dept_w = df_withdrawals[df_withdrawals['department'] == selected_dept].copy()
+    df_w_current = st.session_state.withdrawals_db
+    if not df_w_current.empty and 'department' in df_w_current.columns:
+        current_dept_w = df_w_current[df_w_current['department'] == selected_dept].copy()
 
         if st.session_state.list_filter == "today":
             today_str = today_metric_date.strftime("%Y-%m-%d")
@@ -253,13 +184,11 @@ with tab1:
                 
                 if status == 'Pending':
                     if st.button("✔️ Ολοκλήρωση", key=f"done_{idx}"):
-                        df_withdrawals.loc[idx, 'status'] = 'Done'
-                        update_worksheet("Αποσύρσεις", df_withdrawals)
+                        st.session_state.withdrawals_db.loc[idx, 'status'] = 'Done'
                         st.rerun()
                 else:
                     if st.button("↩️ Επαναφορά", key=f"undo_{idx}"):
-                        df_withdrawals.loc[idx, 'status'] = 'Pending'
-                        update_worksheet("Αποσύρσεις", df_withdrawals)
+                        st.session_state.withdrawals_db.loc[idx, 'status'] = 'Pending'
                         st.rerun()
                 st.divider()
     else:
@@ -281,8 +210,7 @@ with tab2:
                 "rule_days": db_rule,
                 "department": db_dept
             }])
-            updated_prods = pd.concat([df_products, new_prod], ignore_index=True) if not df_products.empty else new_prod
-            update_worksheet("Προϊόντα", updated_prods)
+            st.session_state.products_db = pd.concat([st.session_state.products_db, new_prod], ignore_index=True)
             st.success("Αποθηκεύτηκε επιτυχώς!")
             st.rerun()
         else:
@@ -290,7 +218,7 @@ with tab2:
 
     st.divider()
     st.subheader("📋 Λίστα Αποθηκευμένων Προϊόντων")
-    if not df_products.empty:
-        st.dataframe(df_products, use_container_width=True)
+    if not st.session_state.products_db.empty:
+        st.dataframe(st.session_state.products_db, use_container_width=True)
     else:
         st.info("Δεν υπάρχουν προϊόντα ακόμα.")
