@@ -12,7 +12,11 @@ SCOPE = [
 ]
 
 def clean_private_key(key_str):
+    # Καθαρίζει και ανακατασκευάζει σωστά το PEM κλειδί ανεξάρτητα από το πώς αποθηκεύτηκε στα secrets
     key_str = str(key_str).strip(" '\"()\n\r\t")
+    # Αντικατάσταση τυχόν literal \n σε πραγματικές αλλαγές γραμμής
+    key_str = key_str.replace("\\n", "\n")
+    
     match = re.search(r'-----BEGIN PRIVATE KEY-----(.*?)-----END PRIVATE KEY-----', key_str, re.DOTALL)
     if match:
         base64_part = match.group(1)
@@ -190,7 +194,6 @@ with tab1:
 
     col_search, col_fbtn = st.columns([2, 1])
     with col_search:
-        # Αναζήτηση / Σάρωση Barcode ή Ονόματος στις Αποσύρσεις
         search_query = st.text_input("📷 Αναζήτηση ή Σάρωση Barcode/Ονόματος...", key="search_w", placeholder="Σκανάρετε barcode ή γράψτε όνομα...")
     with col_fbtn:
         filter_mode = st.radio(
@@ -218,7 +221,6 @@ with tab1:
             current_dept_w = current_dept_w[current_dept_w['status'] == 'Pending']
         
         if search_query:
-            # Φιλτράρισμα είτε με βάση το όνομα προϊόντος είτε με βάση το barcode
             current_dept_w = current_dept_w[
                 current_dept_w['product_name'].str.contains(search_query, case=False, na=False) |
                 current_dept_w['barcode'].astype(str).str.contains(search_query, case=False, na=False)
