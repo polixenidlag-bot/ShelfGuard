@@ -3,9 +3,6 @@ import pandas as pd
 from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
-import json
-import base64
-import textwrap
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -14,16 +11,12 @@ SCOPE = [
 
 def get_gsheet_client():
     try:
-        raw_json = st.secrets["GOOGLE_CREDENTIALS_JSON"]
-        secrets_dict = json.loads(raw_json)
+        secrets = st.secrets["connections"]["gsheets"]
+        secrets_dict = dict(secrets)
         
-        # Ανάκτηση και ανακατασκευή του private key από Base64
-        if "private_key_b64" in secrets_dict:
-            b64_bytes = secrets_dict["private_key_b64"].encode("ascii")
-            decoded_bytes = base64.b64decode(b64_bytes)
-            pk_clean = decoded_bytes.decode("ascii")
-            wrapped = "\n".join(textwrap.wrap(pk_clean, 64))
-            secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{wrapped}\n-----END PRIVATE KEY-----\n"
+        # Διασφάλιση ότι το private_key έχει σωστά τα \n στις αλλαγές γραμμής
+        if "private_key" in secrets_dict:
+            secrets_dict["private_key"] = str(secrets_dict["private_key"]).replace("\\n", "\n")
 
         creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
