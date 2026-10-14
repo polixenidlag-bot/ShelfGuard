@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
@@ -32,6 +33,39 @@ if "list_filter" not in st.session_state:
 df_products = st.session_state.products_db
 df_withdrawals = st.session_state.withdrawals_db
 
+# Συνάρτηση για το widget της κάμερας με κουμπί ενεργοποίησης
+def render_camera_scanner(scanner_id):
+    components.html(f"""
+        <div style="text-align: center; background: #1e1e1e; padding: 10px; border-radius: 8px;">
+            <div id="reader_{scanner_id}" style="width:100%; max-width:300px; margin:auto;"></div>
+            <button id="btn_{scanner_id}" onclick="startCam_{scanner_id}()" style="margin-top:8px; padding:8px 16px; background:#ff4b4b; color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">📸 Άνοιγμα Κάμερας</button>
+        </div>
+        <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+        <script>
+            function startCam_{scanner_id}() {{
+                document.getElementById('btn_{scanner_id}').style.display = 'none';
+                const scanner = new Html5Qrcode("reader_{scanner_id}");
+                scanner.start(
+                    {{ facingMode: "environment" }},
+                    {{ fps: 10, qrbox: {{ width: 220, height: 100 }} }},
+                    (decodedText) => {{
+                        const activeInput = window.parent.document.activeElement;
+                        if (activeInput && activeInput.tagName === 'INPUT') {{
+                            activeInput.value = decodedText;
+                            activeInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                        }}
+                        scanner.stop().catch(err => {{}});
+                        document.getElementById('btn_{scanner_id}').style.display = 'block';
+                    }},
+                    (err) => {{}}
+                ).catch(err => {{
+                    alert("Δεν ήταν δυνατή η πρόσβαση στην κάμερα.");
+                    document.getElementById('btn_{scanner_id}').style.display = 'block';
+                }});
+            }}
+        </script>
+    """, height=240)
+
 with tab1:
     selected_dept = st.selectbox("📍 Επιλέξτε Τμήμα / Ψυγείο:", DEPARTMENTS, key="dept_tab1")
     
@@ -62,7 +96,10 @@ with tab1:
     st.divider()
     st.subheader("📦 Καταχώρηση Προϊόντος")
     
-    active_code = st.text_input("📷 Barcode Προϊόντος (Πατήστε εδώ και σκανάρετε με το πληκτρολόγιο/κάμερα):", key="manual_bc_tab1", placeholder="Σκαναρίστε ή πληκτρολογήστε...")
+    with st.expander("📷 Άνοιγμα Κάμερας για Σάρωση Barcode"):
+        render_camera_scanner("tab1")
+
+    active_code = st.text_input("Barcode Προϊόντος (Κάντε κλικ εδώ και σκανάρετε):", key="manual_bc_tab1", placeholder="Πατήστε εδώ και σκανάρετε...")
 
     if active_code:
         product_row = None
@@ -196,8 +233,11 @@ with tab1:
 
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
-    # Προσθήκη πεδίου barcode και στην καρτέλα 2
-    db_barcode = st.text_input("📷 Barcode Νέου Προϊόντος (Πατήστε εδώ για σκανάρισμα):", key="db_manual_bc", placeholder="Σκαναρίστε ή πληκτρολογήστε...")
+    
+    with st.expander("📷 Άνοιγμα Κάμερας για Σάρωση Barcode"):
+        render_camera_scanner("tab2")
+
+    db_barcode = st.text_input("Barcode Νέου Προϊόντος (Κάντε κλικ εδώ και σκανάρετε):", key="db_manual_bc", placeholder="Πατήστε εδώ και σκανάρετε...")
     
     db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input")
     db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
