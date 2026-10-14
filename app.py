@@ -5,10 +5,12 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
-# Έλεγχος αν ήρθε κωδικός από την κάμερα μέσω αυτόματης ανανέωσης
+# Έλεγχος αν ήρθε κωδικός από την κάμερα και άμεση αποθήκευση στη μνήμη
 if "scanned" in st.query_params:
-    st.session_state.scanned_barcode = st.query_params["scanned"]
+    scanned_val = st.query_params["scanned"]
     st.query_params.clear()
+    st.session_state["manual_bc_tab1"] = scanned_val
+    st.session_state["db_manual_bc"] = scanned_val
     st.rerun()
 
 st.title("🧊 ShelfGuard")
@@ -22,9 +24,6 @@ if "withdrawals_db" not in st.session_state:
     st.session_state.withdrawals_db = pd.DataFrame(columns=[
         "department", "barcode", "product_name", "expiry_date", "withdrawal_date", "quantity", "status"
     ])
-
-if "scanned_barcode" not in st.session_state:
-    st.session_state.scanned_barcode = ""
 
 tab1, tab2 = st.tabs(["📋 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
@@ -42,7 +41,7 @@ if "list_filter" not in st.session_state:
 df_products = st.session_state.products_db
 df_withdrawals = st.session_state.withdrawals_db
 
-# Συνάρτηση σαρωτή κάμερας με αυτόματη μεταφορά του κωδικού
+# Συνάρτηση σαρωτή κάμερας
 def render_camera_scanner(scanner_id):
     components.html(f"""
         <div style="text-align: center; background: #1e1e1e; padding: 10px; border-radius: 8px;">
@@ -95,22 +94,19 @@ with tab1:
     st.divider()
     st.subheader("📦 Καταχώρηση Προϊόντος")
     
-    # 1. ΠΡΩΤΑ ΤΟ ΠΕΔΙΟ ΚΕΙΜΕΝΟΥ
+    # 1. ΠΡΩΤΑ το πεδίο κειμένου
     active_code = st.text_input(
         "Barcode Προϊόντος:", 
-        value=st.session_state.scanned_barcode, 
         key="manual_bc_tab1", 
         placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
     )
 
-    # 2. ΜΕΤΑ Ο ΔΙΑΚΟΠΤΗΣ ΚΑΙ Η ΚΑΜΕΡΑ ΑΠΟ ΚΑΤΩ
+    # 2. ΜΕΤΑ ο διακόπτης και η κάμερα από κάτω
     cam_toggle_1 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_1")
     if cam_toggle_1:
         render_camera_scanner("tab1")
 
     if active_code:
-        st.session_state.scanned_barcode = active_code
-        
         product_row = None
         if not df_products.empty and 'barcode' in df_products.columns:
             match = df_products[df_products['barcode'].astype(str) == str(active_code)]
@@ -137,7 +133,7 @@ with tab1:
                     "status": "Pending"
                 }])
                 st.session_state.withdrawals_db = pd.concat([st.session_state.withdrawals_db, new_row], ignore_index=True)
-                st.session_state.scanned_barcode = ""
+                st.session_state["manual_bc_tab1"] = ""
                 st.success("Προστέθηκε επιτυχώς!")
                 st.rerun()
                 
@@ -169,7 +165,7 @@ with tab1:
                         "status": "Pending"
                     }])
                     st.session_state.withdrawals_db = pd.concat([st.session_state.withdrawals_db, new_w], ignore_index=True)
-                    st.session_state.scanned_barcode = ""
+                    st.session_state["manual_bc_tab1"] = ""
                     
                     st.success("Αποθηκεύτηκε επιτυχώς!")
                     st.rerun()
@@ -245,21 +241,17 @@ with tab1:
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
     
-    # 1. ΠΡΩΤΑ ΤΟ ΠΕΔΙΟ ΚΕΙΜΕΝΟΥ
+    # 1. ΠΡΩΤΑ το πεδίο κειμένου στη 2η καρτέλα
     db_barcode = st.text_input(
         "Barcode Νέου Προϊόντος:", 
-        value=st.session_state.scanned_barcode, 
         key="db_manual_bc", 
         placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
     )
     
-    # 2. ΜΕΤΑ Ο ΔΙΑΚΟΠΤΗΣ ΚΑΙ Η ΚΑΜΕΡΑ ΑΠΟ ΚΑΤΩ
+    # 2. ΜΕΤΑ ο διακόπτης και η κάμερα από κάτω
     cam_toggle_2 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_2")
     if cam_toggle_2:
         render_camera_scanner("tab2")
-
-    if db_barcode:
-        st.session_state.scanned_barcode = db_barcode
 
     db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input")
     db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
@@ -274,7 +266,7 @@ with tab2:
                 "department": db_dept
             }])
             st.session_state.products_db = pd.concat([st.session_state.products_db, new_prod], ignore_index=True)
-            st.session_state.scanned_barcode = ""
+            st.session_state["db_manual_bc"] = ""
             st.success("Αποθηκεύτηκε επιτυχώς!")
             st.rerun()
         else:
