@@ -3,37 +3,18 @@ import pandas as pd
 from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
-import textwrap
-import re
+import json
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 
-def clean_private_key(key_str):
-    # Καθαρίζει και ανακατασκευάζει σωστά το PEM κλειδί ανεξάρτητα από το πώς αποθηκεύτηκε στα secrets
-    key_str = str(key_str).strip(" '\"()\n\r\t")
-    # Αντικατάσταση τυχόν literal \n σε πραγματικές αλλαγές γραμμής
-    key_str = key_str.replace("\\n", "\n")
-    
-    match = re.search(r'-----BEGIN PRIVATE KEY-----(.*?)-----END PRIVATE KEY-----', key_str, re.DOTALL)
-    if match:
-        base64_part = match.group(1)
-    else:
-        base64_part = key_str.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
-    
-    clean_base64 = "".join(re.findall(r'[A-Za-z0-9+/=]', base64_part))
-    wrapped = "\n".join(textwrap.wrap(clean_base64, 64))
-    return f"-----BEGIN PRIVATE KEY-----\n{wrapped}\n-----END PRIVATE KEY-----\n"
-
 def get_gsheet_client():
     try:
-        secrets = st.secrets["connections"]["gsheets"]
-        secrets_dict = dict(secrets)
-        
-        if "private_key" in secrets_dict:
-            secrets_dict["private_key"] = clean_private_key(secrets_dict["private_key"])
+        # Διαβάζει ολόκληρο το JSON απευθείας από τα secrets, μηδενίζοντας τα λάθη μορφοποίησης
+        raw_json = st.secrets["GOOGLE_CREDENTIALS_JSON"]
+        secrets_dict = json.loads(raw_json)
         
         creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
