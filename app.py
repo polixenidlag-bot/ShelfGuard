@@ -14,6 +14,11 @@ SCOPE = [
 def get_gsheet_client():
     try:
         secrets_dict = dict(st.secrets["connections"]["gsheets"])
+        # Αυτόματη ένωση των δύο κομματιών του κλειδιού
+        secrets_dict["private_key"] = secrets_dict["private_key_part1"] + secrets_dict["private_key_part2"]
+        del secrets_dict["private_key_part1"]
+        del secrets_dict["private_key_part2"]
+        
         creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
         return client
