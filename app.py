@@ -4,11 +4,24 @@ from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
 import textwrap
+import re
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
+
+def clean_private_key(key_str):
+    key_str = str(key_str).strip(" '\"()\n\r\t")
+    match = re.search(r'-----BEGIN PRIVATE KEY-----(.*?)-----END PRIVATE KEY-----', key_str, re.DOTALL)
+    if match:
+        base64_part = match.group(1)
+    else:
+        base64_part = key_str.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+    
+    clean_base64 = "".join(re.findall(r'[A-Za-z0-9+/=]', base64_part))
+    wrapped = "\n".join(textwrap.wrap(clean_base64, 64))
+    return f"-----BEGIN PRIVATE KEY-----\n{wrapped}\n-----END PRIVATE KEY-----\n"
 
 def get_gsheet_client():
     try:
@@ -16,11 +29,7 @@ def get_gsheet_client():
         secrets_dict = dict(secrets)
         
         if "private_key" in secrets_dict:
-            raw_key = secrets_dict["private_key"]
-            clean_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
-            clean_key = "".join(clean_key.split())
-            wrapped_key = "\n".join(textwrap.wrap(clean_key, 64))
-            secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{wrapped_key}\n-----END PRIVATE KEY-----\n"
+            secrets_dict["private_key"] = clean_private_key(secrets_dict["private_key"])
         
         creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
@@ -181,7 +190,8 @@ with tab1:
 
     col_search, col_fbtn = st.columns([2, 1])
     with col_search:
-        search_query = st.text_input("🔍 Αναζήτηση προϊόντος...", key="search_w")
+        # Αναζήτηση / Σάρωση Barcode ή Ονόματος στις Αποσύρσεις
+        search_query = st.text_input("📷 Αναζήτηση ή Σάρωση Barcode/Ονόματος...", key="search_w", placeholder="Σκανάρετε barcode ή γράψτε όνομα...")
     with col_fbtn:
         filter_mode = st.radio(
             "Προβολή:",
@@ -208,7 +218,11 @@ with tab1:
             current_dept_w = current_dept_w[current_dept_w['status'] == 'Pending']
         
         if search_query:
-            current_dept_w = current_dept_w[current_dept_w['product_name'].str.contains(search_query, case=False, na=False)]
+            # Φιλτράρισμα είτε με βάση το όνομα προϊόντος είτε με βάση το barcode
+            current_dept_w = current_dept_w[
+                current_dept_w['product_name'].str.contains(search_query, case=False, na=False) |
+                current_dept_w['barcode'].astype(str).str.contains(search_query, case=False, na=False)
+            ]
 
     if not current_dept_w.empty:
         for idx, row in current_dept_w.iterrows():
@@ -222,7 +236,7 @@ with tab1:
             status = row['status']
             
             with st.container():
-                st.write(f"**{row['product_name']}** ({qty} τεμ.)")
+                st.write(f"**{row['product_name']}** ({qty} τεμ.) — Barcode: `{row['barcode']}`")
                 st.write(f"🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')} | ⏰ Απόσυρση: {w_date.strftime('%d/%m/%Y')}")
                 st.write(f"Κατάσταση: {status}")
                 
@@ -242,7 +256,8 @@ with tab1:
 
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
-    db_barcode = st.text_input("Barcode Προϊόντος:", key="db_manual_bc")
+    db_barcode = st.text_input("📷 Barcode Προϊόντος (Σκανάρετε με το πληκτρολόγιο ή πληκτρολογήστε):", key="db_manual_bc", placeholder="Πατήστε εδώ και σκανάρετε...")
+    
     db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input")
     db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
     db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
