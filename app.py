@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import streamlit.components.v1 as components
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
@@ -16,10 +15,6 @@ if "withdrawals_db" not in st.session_state:
     st.session_state.withdrawals_db = pd.DataFrame(columns=[
         "department", "barcode", "product_name", "expiry_date", "withdrawal_date", "quantity", "status"
     ])
-
-# Αποθήκευση τελευταίου scanned barcode
-if "scanned_barcode" not in st.session_state:
-    st.session_state.scanned_barcode = ""
 
 tab1, tab2 = st.tabs(["📋 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
@@ -65,35 +60,9 @@ with tab1:
             st.rerun()
         
     st.divider()
-    st.subheader("📷 Κάμερα - Σάρωση Barcode")
+    st.subheader("📦 Καταχώρηση Προϊόντος")
     
-    # Ενσωματωμένο Scanner Κάμερας (Λειτουργεί σε κινητά και υπολογιστές με κάμερα)
-    scanner_code = st.text_input("Barcode (Αυτόματο από κάμερα ή πληκτρολόγιο):", value=st.session_state.scanned_barcode, key="manual_bc_tab1")
-
-    with st.expander("📸 Άνοιγμα / Κλείσιμο Κάμερας για Σάρωση"):
-        components.html("""
-            <div style="text-align: center;">
-                <div id="reader" style="width:100%; max-width:350px; margin:auto;"></div>
-            </div>
-            <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-            <script>
-                function onScanSuccess(decodedText, decodedResult) {
-                    const inputField = window.parent.document.querySelector('input[aria-label*="Barcode"]');
-                    if (inputField) {
-                        inputField.value = decodedText;
-                        inputField.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
-                }
-                let html5QrCode = new Html5Qrcode("reader");
-                html5QrCode.start(
-                    { facingMode: "environment" },
-                    { fps: 10, qrbox: { width: 250, height: 120 } },
-                    onScanSuccess
-                ).catch(err => { console.log(err); });
-            </script>
-        """, height=300)
-
-    active_code = scanner_code
+    active_code = st.text_input("📷 Barcode Προϊόντος (Πατήστε εδώ και σκανάρετε με το πληκτρολόγιο/κάμερα):", key="manual_bc_tab1", placeholder="Σκαναρίστε ή πληκτρολογήστε...")
 
     if active_code:
         product_row = None
@@ -227,7 +196,8 @@ with tab1:
 
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
-    db_barcode = st.text_input("📷 Barcode Προϊόντος:", key="db_manual_bc", placeholder="Σκανάρετε με κάμερα ή πληκτρολογήστε...")
+    # Προσθήκη πεδίου barcode και στην καρτέλα 2
+    db_barcode = st.text_input("📷 Barcode Νέου Προϊόντος (Πατήστε εδώ για σκανάρισμα):", key="db_manual_bc", placeholder="Σκαναρίστε ή πληκτρολογήστε...")
     
     db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input")
     db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
