@@ -5,6 +5,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_qrcode_scanner import qrcode_scanner
 import textwrap
+import re
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -13,16 +14,19 @@ SCOPE = [
 
 def get_gsheet_client():
     try:
-        # Χωρίς cache για να διαβάζει πάντα τα νέα δεδομένα
         secrets = st.secrets["connections"]["gsheets"]
         secrets_dict = dict(secrets)
         
         if "private_key" in secrets_dict:
             raw_key = secrets_dict["private_key"]
-            clean_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
-            clean_key = "".join(clean_key.split())
-            wrapped_key = "\n".join(textwrap.wrap(clean_key, 64))
-            secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{wrapped_key}\n-----END PRIVATE KEY-----\n"
+            # Καθαρισμός από τυχόν "έξυπνα" εισαγωγικά, κενά ή αόρατους χαρακτήρες του κινητού
+            raw_key = raw_key.replace('“', '').replace('”', '').replace('"', '').replace("'", "")
+            clean = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+            # Κρατάμε αποκλειστικά τους έγκυρους χαρακτήρες Base64
+            clean = "".join(re.findall(r'[A-Za-z0-9+/=]', clean))
+            # Τυποποίηση ακριβώς σε γραμμές 64 χαρακτήρων (όπως ορίζει το cryptography.io)
+            wrapped = "\n".join(textwrap.wrap(clean, 64))
+            secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{wrapped}\n-----END PRIVATE KEY-----\n"
         
         creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
