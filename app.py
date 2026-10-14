@@ -2,9 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from streamlit_gsheets import GSheetsConnection
-from PIL import Image
-import zxing_cpp
-import io
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1DQHu9EFzWqKvK5e8E_lAcsnshEa1tskLhFDt5ruHOvY/edit?usp=drivesdk"
 
@@ -26,20 +23,6 @@ def update_worksheet(worksheet_name, df):
         st.error(f"Σφάλμα αποθήκευσης: {e}")
         return False
 
-# Νέα σταθερή συνάρτηση αποκωδικοποίησης barcode από φωτογραφία
-def decode_image_zxing(image_input):
-    if image_input is None:
-        return None
-    try:
-        img = Image.open(image_input)
-        # Χρήση Zxing-cpp για διάβασμα όλων των τύπων barcode
-        results = zxing_cpp.read_barcodes(img)
-        if results:
-            return results[0].text # Επιστρέφει το κείμενο του πρώτου barcode
-        return None
-    except Exception as e:
-        return None
-
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
 st.title("🧊 ShelfGuard")
@@ -52,7 +35,7 @@ DEPARTMENTS = [
     "Ψυγείο 2: Γιαούρτια",
     "Ψυγείο 3: ΣΕΡΒΙΣ",
     "Ψυγείο 4: ΒΟΥΤΥΡΟ",
-    "Ψuγεία ΑΠΟΘΗΚΗ"
+    "Ψυγεία ΑΠΟΘΗΚΗ"
 ]
 
 if "list_filter" not in st.session_state:
@@ -91,31 +74,10 @@ with tab1:
     st.divider()
     st.subheader("📦 Καταχώρηση Προϊόντος")
     
-    # --- ΝΕΟ ΣΚΑΝΕΡ ΜΕ ΛΗΨΗ ΦΩΤΟΓΡΑΦΙΑΣ ---
-    st.write("📷 Σάρωση Barcode από Κάμερα:")
-    camera_image = st.camera_input("Τραβήξτε φωτογραφία το barcode", key="sc_input")
-    
-    active_code = ""
-    # Προσπάθεια αποκωδικοποίησης αν υπάρχει φωτογραφία
-    if camera_image:
-        decoded = decode_image_zxing(camera_image)
-        if decoded:
-            active_code = decoded
-            st.success(f"Επιτυχής Σάρωση Barcode: {active_code}")
-        else:
-            st.error("Δεν βρέθηκε έγκυρο barcode στη φωτογραφία. Παρακαλώ δοκιμάστε ξανά.")
-    
-    # Εναλλακτικά: Πληκτρολόγηση
-    manual_bc = st.text_input("Ή Πληκτρολόγηση / Σκάνερ (πιστόλι):", key="manual_bc_tab1", placeholder="Πληκτρολογήστε barcode...")
-    
-    # Χρήση του σκαναρισμένου κώδικα (προτεραιότητα) ή του πληκτρολογημένου
-    if not active_code and manual_bc:
-        active_code = manual_bc
-
-    # --- Τέλος Σκάνερ ---
+    # Πεδίο barcode: Στο κινητό πατάς το εικονίδιο σάρωσης/κάμερας στο πληκτρολόγιό σου
+    active_code = st.text_input("📷 Barcode Προϊόντος (Σκανάρετε με το πληκτρολόγιο ή πληκτρολογήστε):", key="manual_bc_tab1", placeholder="Πατήστε εδώ και σκανάρετε...")
 
     if active_code:
-        # (Το υπόλοιπο κομμάτι παραμένει το ίδιο για τη διαχείριση του προϊόντος)
         product_row = None
         if not df_products.empty and 'barcode' in df_products.columns:
             match = df_products[df_products['barcode'].astype(str) == str(active_code)]
@@ -144,9 +106,6 @@ with tab1:
                 updated_withdrawals = pd.concat([df_withdrawals, new_row], ignore_index=True) if not df_withdrawals.empty else new_row
                 update_worksheet("Αποσύρσεις", updated_withdrawals)
                 st.success("Προστέθηκε επιτυχώς!")
-                # Resetactive code for next scan
-                del st.session_state["manual_bc_tab1"]
-                del st.session_state["sc_input"]
                 st.rerun()
                 
         else:
@@ -177,19 +136,17 @@ with tab1:
                         "quantity": qty_input_new,
                         "status": "Pending"
                     }])
-                    updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else updated_w
+                    updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else new_w
                     update_worksheet("Αποσύρσεις", updated_w)
                     
                     st.success("Αποθηκεύτηκε επιτυχώς!")
-                    del st.session_state["manual_bc_tab1"]
-                    del st.session_state["sc_input"]
                     st.rerun()
                 else:
                     st.error("Παρακαλώ συμπληρώστε το όνομα του προϊόντος.")
 
-    # (Το υπόλοιπο κομμάτι της λίστας αποσύρσεων παραμένει ίδιο)
     st.divider()
     st.subheader(f"🚨 Λίστα Αποσύρσεων - {selected_dept}")
+
     col_search, col_fbtn = st.columns([2, 1])
     with col_search:
         search_query = st.text_input("🔍 Αναζήτηση προϊόντος...", key="search_w")
@@ -211,6 +168,7 @@ with tab1:
     current_dept_w = pd.DataFrame()
     if not df_withdrawals.empty and 'department' in df_withdrawals.columns:
         current_dept_w = df_withdrawals[df_withdrawals['department'] == selected_dept].copy()
+
         if st.session_state.list_filter == "today":
             today_str = today_metric_date.strftime("%Y-%m-%d")
             current_dept_w = current_dept_w[(current_dept_w['status'] == 'Pending') & (current_dept_w['withdrawal_date'].astype(str).str.startswith(today_str))]
@@ -227,6 +185,7 @@ with tab1:
                 exp_date = datetime.strptime(str(row['expiry_date'])[:10], "%Y-%m-%d").date()
             except:
                 continue
+            
             qty = row['quantity'] if pd.notnull(row['quantity']) else 1
             status = row['status']
             
@@ -270,6 +229,7 @@ with tab2:
             st.rerun()
         else:
             st.error("Συμπληρώστε barcode και όνομα.")
+
     st.divider()
     st.subheader("📋 Λίστα Αποθηκευμένων Προϊόντων")
     if not df_products.empty:
