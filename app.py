@@ -96,9 +96,9 @@ DEPARTMENTS = [
 if "list_filter" not in st.session_state:
     st.session_state.list_filter = "pending_all"
 
-# ΦΟΡΤΩΣΗ ΔΕΔΟΜΕΝΩΝ ΑΠΟ GOOGLE SHEETS
-df_products = load_data("products")
-df_withdrawals = load_data("withdrawals")
+# ΦΟΡΤΩΣΗ ΔΕΔΟΜΕΝΩΝ ΑΠΟ GOOGLE SHEETS (ΕΛΛΗΝΙΚΕΣ ΚΑΡΤΕΛΕΣ)
+df_products = load_data("Προϊόντα")
+df_withdrawals = load_data("Αποσύρσεις")
 
 # ----------------------------------------------------
 # TAB 1: ΣΑΡΩΣΗ & ΑΠΟΣΥΡΣΕΙΣ
@@ -167,7 +167,7 @@ with tab1:
                         "status": "Pending"
                     }])
                     updated_withdrawals = pd.concat([df_withdrawals, new_row], ignore_index=True) if not df_withdrawals.empty else new_row
-                    conn.update(worksheet="withdrawals", data=updated_withdrawals)
+                    conn.update(worksheet="Αποσύρσεις", data=updated_withdrawals)
                     st.toast(f"Προστέθηκε το {prod_name} ({qty_input} τεμ.)!", icon="🎉")
                     st.rerun()
                     
@@ -187,7 +187,7 @@ with tab1:
                             "department": selected_dept
                         }])
                         updated_prods = pd.concat([df_products, new_prod], ignore_index=True) if not df_products.empty else new_prod
-                        conn.update(worksheet="products", data=updated_prods)
+                        conn.update(worksheet="Προϊόντα", data=updated_prods)
                         
                         withdrawal_date = expiry_input - timedelta(days=new_rule)
                         new_w = pd.DataFrame([{
@@ -200,7 +200,7 @@ with tab1:
                             "status": "Pending"
                         }])
                         updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else new_w
-                        conn.update(worksheet="withdrawals", data=updated_w)
+                        conn.update(worksheet="Αποσύρσεις", data=updated_w)
                         
                         st.success("Το προϊόν αποθηκεύτηκε στο Google Sheet και προστέθηκε στις αποσύρσεις!")
                         st.rerun()
@@ -290,12 +290,12 @@ with tab1:
                     if status == 'Pending':
                         if st.button("✔️", key=f"done_{idx}"):
                             df_withdrawals.loc[idx, 'status'] = 'Done'
-                            conn.update(worksheet="withdrawals", data=df_withdrawals)
+                            conn.update(worksheet="Αποσύρσεις", data=df_withdrawals)
                             st.rerun()
                     else:
                         if st.button("↩️", key=f"undo_{idx}"):
                             df_withdrawals.loc[idx, 'status'] = 'Pending'
-                            conn.update(worksheet="withdrawals", data=df_withdrawals)
+                            conn.update(worksheet="Αποσύρσεις", data=df_withdrawals)
                             st.rerun()
     else:
         st.info("Δεν βρέθηκαν προϊόντα στη λίστα για αυτό το φίλτρο/τμήμα.")
@@ -320,7 +320,7 @@ with tab2:
                 "department": db_dept
             }])
             updated_prods = pd.concat([df_products, new_prod], ignore_index=True) if not df_products.empty else new_prod
-            conn.update(worksheet="products", data=updated_prods)
+            conn.update(worksheet="Προϊόντα", data=updated_prods)
             st.success(f"Το προϊόν **{db_name}** αποθηκεύτηκε επιτυχώς στο Google Sheet!")
             st.rerun()
         else:
