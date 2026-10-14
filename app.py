@@ -3,21 +3,47 @@ import pandas as pd
 from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
+import textwrap
+import re
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 
+def clean_private_key(key_str):
+    if not key_str:
+        return ""
+    key_str = str(key_str).strip()
+    key_str = key_str.replace("\\\\n", "\n").replace("\\n", "\n")
+    
+    match = re.search(r'-----BEGIN PRIVATE KEY-----(.*?)-----END PRIVATE KEY-----', key_str, re.DOTALL)
+    if match:
+        b64_data = match.group(1)
+    else:
+        b64_data = key_str.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+    
+    # Καθαρισμός και διατήρηση μόνο εγκύρων χαρακτήρων base64
+    clean_chars = "".join(re.findall(r'[A-Za-z0-9+/]', b64_data))
+    
+    # Αυτόματο padding με '=' αν λείπει
+    padding_needed = len(clean_chars) % 4
+    if padding_needed:
+        clean_chars += '=' * (4 - padding_needed)
+        
+    wrapped = "\n".join(textwrap.wrap(clean_chars, 64))
+    return f"-----BEGIN PRIVATE KEY-----\n{wrapped}\n-----END PRIVATE KEY-----\n"
+
 def get_gsheet_client():
     try:
-        secrets = st.secrets["connections"]["gsheets"]
-        secrets_dict = dict(secrets)
-        
-        # Διασφάλιση ότι το private_key έχει σωστά τα \n στις αλλαγές γραμμής
+        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+            secrets_dict = dict(st.secrets["connections"]["gsheets"])
+        else:
+            secrets_dict = dict(st.secrets)
+            
         if "private_key" in secrets_dict:
-            secrets_dict["private_key"] = str(secrets_dict["private_key"]).replace("\\n", "\n")
-
+            secrets_dict["private_key"] = clean_private_key(secrets_dict["private_key"])
+        
         creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
         return client
