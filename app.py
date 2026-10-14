@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from streamlit_gsheets import GSheetsConnection
-from streamlit_barcode_scanner import streamlit_barcode_scanner
+from streamlit_qrcode_scanner import qrcode_scanner
 
 # ----------------------------------------------------
 # 1. ΣΥΝΔΕΣΗ ΜΕ GOOGLE SHEETS
@@ -143,10 +143,10 @@ with tab1:
         
         active_code = ""
         if scan_mode_1 == "📷 Σάρωση με Κάμερα":
-            st.info("Ενεργοποιήστε την κάμερα για να διαβάσετε το barcode:")
-            scanned_result = streamlit_barcode_scanner()
-            if scanned_result:
-                active_code = str(scanned_result)
+            st.info("Ενεργοποίηση κάμερας για σάρωση:")
+            scanned_val = qrcode_scanner(key="scanner_tab1")
+            if scanned_val:
+                active_code = str(scanned_val)
                 st.success(f"Επιτυχής Σάρωση Barcode: **{active_code}**")
         else:
             active_code = st.text_input("Barcode Προϊόντος:", key="manual_bc_tab1", placeholder="Πληκτρολογήστε barcode...")
@@ -210,7 +210,7 @@ with tab1:
                             "quantity": qty_input_new,
                             "status": "Pending"
                         }])
-                        updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else new_w
+                        updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else updated_w
                         conn.update(worksheet="Αποσύρσεις", data=updated_w)
                         
                         st.success("Το προϊόν αποθηκεύτηκε στο Google Sheet και προστέθηκε στις αποσύρσεις!")
@@ -321,10 +321,10 @@ with tab2:
     
     db_barcode = ""
     if scan_mode_2 == "📷 Σάρωση με Κάμερα":
-        st.info("Σάρωση barcode νέου προϊόντος με κάμερα:")
-        scanned_result_db = streamlit_barcode_scanner()
-        if scanned_result_db:
-            db_barcode = str(scanned_result_db)
+        st.info("Ενεργοποίηση κάμερας για σάρωση νέου προϊόντος:")
+        scanned_val_db = qrcode_scanner(key="scanner_tab2")
+        if scanned_val_db:
+            db_barcode = str(scanned_val_db)
             st.success(f"Barcode: **{db_barcode}**")
     else:
         db_barcode = st.text_input("Barcode Προϊόντος:", key="db_manual_bc", placeholder="π.χ. 520101...")
