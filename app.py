@@ -1,13 +1,14 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
-st.title("🧊 ShelfGuard (Τοπική Λειτουργία)")
+st.title("🧊 ShelfGuard")
 st.write("ΣΥΣΤΗΜΑ ΑΣΦΑΛΟΥΣ ΕΛΕΓΧΟΥ ΗΜΕΡΟΜΗΝΙΩΝ ΚΑΙ ΑΠΟΣΥΡΣΕΩΝ")
 
-# Αρχικοποίηση τοπικής μνήμης (Session State) αν δεν υπάρχουν δεδομένα
+# Αρχικοποίηση τοπικής μνήμης
 if "products_db" not in st.session_state:
     st.session_state.products_db = pd.DataFrame(columns=["barcode", "name", "rule_days", "department"])
 
@@ -15,6 +16,10 @@ if "withdrawals_db" not in st.session_state:
     st.session_state.withdrawals_db = pd.DataFrame(columns=[
         "department", "barcode", "product_name", "expiry_date", "withdrawal_date", "quantity", "status"
     ])
+
+# Αποθήκευση τελευταίου scanned barcode
+if "scanned_barcode" not in st.session_state:
+    st.session_state.scanned_barcode = ""
 
 tab1, tab2 = st.tabs(["📋 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
@@ -60,9 +65,35 @@ with tab1:
             st.rerun()
         
     st.divider()
-    st.subheader("📦 Καταχώρηση Προϊόντος")
+    st.subheader("📷 Κάμερα - Σάρωση Barcode")
     
-    active_code = st.text_input("📷 Barcode Προϊόντος (Σκανάρετε με το πληκτρολόγιο ή πληκτρολογήστε):", key="manual_bc_tab1", placeholder="Πατήστε εδώ και σκανάρετε...")
+    # Ενσωματωμένο Scanner Κάμερας (Λειτουργεί σε κινητά και υπολογιστές με κάμερα)
+    scanner_code = st.text_input("Barcode (Αυτόματο από κάμερα ή πληκτρολόγιο):", value=st.session_state.scanned_barcode, key="manual_bc_tab1")
+
+    with st.expander("📸 Άνοιγμα / Κλείσιμο Κάμερας για Σάρωση"):
+        components.html("""
+            <div style="text-align: center;">
+                <div id="reader" style="width:100%; max-width:350px; margin:auto;"></div>
+            </div>
+            <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+            <script>
+                function onScanSuccess(decodedText, decodedResult) {
+                    const inputField = window.parent.document.querySelector('input[aria-label*="Barcode"]');
+                    if (inputField) {
+                        inputField.value = decodedText;
+                        inputField.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                }
+                let html5QrCode = new Html5Qrcode("reader");
+                html5QrCode.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 250, height: 120 } },
+                    onScanSuccess
+                ).catch(err => { console.log(err); });
+            </script>
+        """, height=300)
+
+    active_code = scanner_code
 
     if active_code:
         product_row = None
@@ -133,7 +164,7 @@ with tab1:
 
     col_search, col_fbtn = st.columns([2, 1])
     with col_search:
-        search_query = st.text_input("📷 Αναζήτηση ή Σάρωση Barcode/Ονόματος...", key="search_w", placeholder="Σκανάρετε barcode ή γράψτε όνομα...")
+        search_query = st.text_input("🔍 Αναζήτηση ανά Barcode ή Όνομα...", key="search_w", placeholder="Γράψτε όνομα...")
     with col_fbtn:
         filter_mode = st.radio(
             "Προβολή:",
@@ -196,7 +227,7 @@ with tab1:
 
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
-    db_barcode = st.text_input("📷 Barcode Προϊόντος (Σκανάρετε με το πληκτρολόγιο ή πληκτρολογήστε):", key="db_manual_bc", placeholder="Πατήστε εδώ και σκανάρετε...")
+    db_barcode = st.text_input("📷 Barcode Προϊόντος:", key="db_manual_bc", placeholder="Σκανάρετε με κάμερα ή πληκτρολογήστε...")
     
     db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input")
     db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
