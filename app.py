@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from streamlit_gsheets import GSheetsConnection
+from streamlit_barcode_scanner import streamlit_barcode_scanner
 
 # ----------------------------------------------------
 # 1. ΣΥΝΔΕΣΗ ΜΕ GOOGLE SHEETS
@@ -96,7 +97,7 @@ DEPARTMENTS = [
 if "list_filter" not in st.session_state:
     st.session_state.list_filter = "pending_all"
 
-# ΦΟΡΤΩΣΗ ΔΕΔΟΜΕΝΩΝ ΑΠΟ GOOGLE SHEETS (ΕΛΛΗΝΙΚΕΣ ΚΑΡΤΕΛΕΣ)
+# ΦΟΡΤΩΣΗ ΔΕΔΟΜΕΝΩΝ ΑΠΟ GOOGLE SHEETS
 df_products = load_data("Προϊόντα")
 df_withdrawals = load_data("Αποσύρσεις")
 
@@ -138,7 +139,17 @@ with tab1:
     with st.container():
         st.subheader("📦 Καταχώρηση Προϊόντος")
         
-        active_code = st.text_input("Barcode Προϊόντος:", key="manual_bc_tab1", placeholder="Πληκτρολογήστε ή σαρώστε barcode...")
+        scan_mode_1 = st.radio("Τρόπος Εισαγωγής Barcode:", ["⌨️ Πληκτρολόγηση / Χειροκίνητα", "📷 Σάρωση με Κάμερα"], key="mode_1", horizontal=True)
+        
+        active_code = ""
+        if scan_mode_1 == "📷 Σάρωση με Κάμερα":
+            st.info("Ενεργοποιήστε την κάμερα για να διαβάσετε το barcode:")
+            scanned_result = streamlit_barcode_scanner()
+            if scanned_result:
+                active_code = str(scanned_result)
+                st.success(f"Επιτυχής Σάρωση Barcode: **{active_code}**")
+        else:
+            active_code = st.text_input("Barcode Προϊόντος:", key="manual_bc_tab1", placeholder="Πληκτρολογήστε barcode...")
 
         if active_code:
             product_row = None
@@ -153,7 +164,7 @@ with tab1:
                 st.success(f"✅ Βρέθηκε: **{prod_name}** (Κανόνας: -{rule_days} ημέρες)")
                 
                 expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), format="DD/MM/YYYY", key="exp_date_1")
-                qty_input = st.number_input("📦 Τεμάχια (Προαιρετικό):", min_value=1, value=1, key="qty_input_1")
+                qty_input = st.number_input("📦 Τεμάχια:", min_value=1, value=1, key="qty_input_1")
                 
                 if st.button("➕ Προσθήκη στις Αποσύρσεις", key="add_w_btn", use_container_width=True):
                     withdrawal_date = expiry_input - timedelta(days=rule_days)
@@ -176,7 +187,7 @@ with tab1:
                 new_name = st.text_input("Όνομα Προϊόντος:", key="new_n", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
                 new_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="new_r")
                 expiry_input = st.date_input("📅 Ημερομηνία Λήξης (από τη συσκευασία):", datetime.today(), key="new_exp", format="DD/MM/YYYY")
-                qty_input_new = st.number_input("📦 Τεμάχια (Προαιρετικό):", min_value=1, value=1, key="qty_input_new")
+                qty_input_new = st.number_input("📦 Τεμάχια:", min_value=1, value=1, key="qty_input_new")
                 
                 if st.button("💾 Αποθήκευση Προϊόντος & Καταχώρηση", key="save_new_btn", use_container_width=True):
                     if new_name:
@@ -306,7 +317,18 @@ with tab1:
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
     
-    db_barcode = st.text_input("Barcode Προϊόντος:", key="db_manual_bc", placeholder="π.χ. 520101...")
+    scan_mode_2 = st.radio("Τρόπος Εισαγωγής Barcode:", ["⌨️ Πληκτρολόγηση / Χειροκίνητα", "📷 Σάρωση με Κάμερα"], key="mode_2", horizontal=True)
+    
+    db_barcode = ""
+    if scan_mode_2 == "📷 Σάρωση με Κάμερα":
+        st.info("Σάρωση barcode νέου προϊόντος με κάμερα:")
+        scanned_result_db = streamlit_barcode_scanner()
+        if scanned_result_db:
+            db_barcode = str(scanned_result_db)
+            st.success(f"Barcode: **{db_barcode}**")
+    else:
+        db_barcode = st.text_input("Barcode Προϊόντος:", key="db_manual_bc", placeholder="π.χ. 520101...")
+
     db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input", placeholder="π.χ. ΓΑΛΑ ΦΡΕΣΚΟ 1L")
     db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
     db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
