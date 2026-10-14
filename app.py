@@ -247,3 +247,52 @@ with tab1:
                 if status == 'Pending':
                     if st.button("✔️ Ολοκλήρωση", key=f"done_{idx}"):
                         df_withdrawals.loc[idx, 'status'] = 'Done'
+                        update_worksheet("Αποσύρσεις", df_withdrawals)
+                        st.rerun()
+                else:
+                    if st.button("↩️ Επαναφορά", key=f"undo_{idx}"):
+                        df_withdrawals.loc[idx, 'status'] = 'Pending'
+                        update_worksheet("Αποσύρσεις", df_withdrawals)
+                        st.rerun()
+                st.divider()
+    else:
+        st.info("Δεν βρέθηκαν προϊόντα.")
+
+with tab2:
+    st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
+    scan_mode_2 = st.radio("Τρόπος Εισαγωγής Barcode:", ["⌨️ Πληκτρολόγηση / Χειροκίνητα", "📷 Σάρωση με Κάμερα"], key="mode_2", horizontal=True)
+    
+    db_barcode = ""
+    if scan_mode_2 == "📷 Σάρωση με Κάμερα":
+        scanned_val_db = qrcode_scanner(key="scanner_tab2")
+        if scanned_val_db:
+            db_barcode = str(scanned_val_db)
+            st.success(f"Barcode: {db_barcode}")
+    else:
+        db_barcode = st.text_input("Barcode Προϊόντος:", key="db_manual_bc")
+
+    db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input")
+    db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
+    db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
+    
+    if st.button("💾 Αποθήκευση Προϊόντος", key="save_db_only_btn", use_container_width=True):
+        if db_barcode and db_name:
+            new_prod = pd.DataFrame([{
+                "barcode": str(db_barcode),
+                "name": db_name,
+                "rule_days": db_rule,
+                "department": db_dept
+            }])
+            updated_prods = pd.concat([df_products, new_prod], ignore_index=True) if not df_products.empty else new_prod
+            update_worksheet("Προϊόντα", updated_prods)
+            st.success("Αποθηκεύτηκε επιτυχώς!")
+            st.rerun()
+        else:
+            st.error("Συμπληρώστε barcode και όνομα.")
+
+    st.divider()
+    st.subheader("📋 Λίστα Αποθηκευμένων Προϊόντων")
+    if not df_products.empty:
+        st.dataframe(df_products, use_container_width=True)
+    else:
+        st.info("Δεν υπάρχουν προϊόντα ακόμα.")
