@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
 from streamlit_qrcode_scanner import qrcode_scanner
+import textwrap
+import re
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -15,11 +17,19 @@ def get_gsheet_client():
         secrets = st.secrets["connections"]["gsheets"]
         secrets_dict = dict(secrets)
         
-        # Διόρθωση αν οι αλλαγές γραμμής είναι γραμμένες ως "\n" κείμενο
         if "private_key" in secrets_dict:
-            pk = secrets_dict["private_key"]
-            if "\\n" in pk and "\n" not in pk:
-                secrets_dict["private_key"] = pk.replace("\\n", "\n")
+            raw_key = str(secrets_dict["private_key"])
+            raw_key = raw_key.replace('“', '').replace('”', '').replace('"', '').replace("'", "")
+            clean = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+            
+            # Καθαρισμός: Κρατάμε ΑΥΣΤΗΡΑ μόνο έγκυρους χαρακτήρες Base64 (διώχνει τελείες, κενά κλπ.)
+            clean = "".join(re.findall(r'[A-Za-z0-9+/]', clean))
+            
+            padding_needed = (4 - len(clean) % 4) % 4
+            clean = clean + '=' * padding_needed
+            
+            wrapped = "\n".join(textwrap.wrap(clean, 64))
+            secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{wrapped}\n-----END PRIVATE KEY-----\n"
         
         creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
@@ -93,12 +103,12 @@ with tab1:
 
     m1, m2 = st.columns(2)
     with m1:
-        st.metric("🚨 Σημερινές Αποσύρσεις", count_today)
+        st.metric("Σημερινές Αποσύρσεις", count_today)
         if st.button("🔍 Φίλτρο: Σημερινά", key="btn_f_today", use_container_width=True):
             st.session_state.list_filter = "today"
             st.rerun()
     with m2:
-        st.metric("⏳ Εκκρεμείς Αποσύρσεις", count_total_pending)
+        st.metric("Εκκρεμείς Αποσύρσεις", count_total_pending)
         if st.button("🔍 Φίλτρο: Εκκρεμείς", key="btn_f_pend", use_container_width=True):
             st.session_state.list_filter = "pending_all"
             st.rerun()
