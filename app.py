@@ -22,8 +22,10 @@ def get_gsheet_client():
             # Καθαρισμός από τυχόν "έξυπνα" εισαγωγικά, κενά ή αόρατους χαρακτήρες του κινητού
             raw_key = raw_key.replace('“', '').replace('”', '').replace('"', '').replace("'", "")
             clean = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
-            # Κρατάμε αποκλειστικά τους έγκυρους χαρακτήρες Base64
-            clean = "".join(re.findall(r'[A-Za-z0-9+/=]', clean))
+            
+            # ΔΙΟΡΘΩΣΗ: Αφαιρέσαμε το '=' από το regex για να μην μπαίνει στη μέση των γραμμών
+            clean = "".join(re.findall(r'[A-Za-z0-9+/]', clean))
+            
             # Τυποποίηση ακριβώς σε γραμμές 64 χαρακτήρων (όπως ορίζει το cryptography.io)
             wrapped = "\n".join(textwrap.wrap(clean, 64))
             secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{wrapped}\n-----END PRIVATE KEY-----\n"
