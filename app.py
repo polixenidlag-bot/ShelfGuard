@@ -15,17 +15,15 @@ SCOPE = [
 def get_gsheet_client():
     try:
         secrets = st.secrets["connections"]["gsheets"]
-        
-        # Αυτόματη ένωση και μορφοποίηση των 3 κομματιών του κλειδιού
-        raw_body = secrets["private_key_part1"] + secrets["private_key_part2"] + secrets["private_key_part3"]
-        wrapped_key = "\n".join(textwrap.wrap(raw_body, 64))
-        private_key = f"-----BEGIN PRIVATE KEY-----\n{wrapped_key}\n-----END PRIVATE KEY-----\n"
-        
         secrets_dict = dict(secrets)
-        secrets_dict["private_key"] = private_key
-        secrets_dict.pop("private_key_part1", None)
-        secrets_dict.pop("private_key_part2", None)
-        secrets_dict.pop("private_key_part3", None)
+        
+        # Αυτόματος καθαρισμός και μορφοποίηση του κλειδιού
+        if "private_key" in secrets_dict:
+            raw_key = secrets_dict["private_key"]
+            clean_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+            clean_key = "".join(clean_key.split())
+            wrapped_key = "\n".join(textwrap.wrap(clean_key, 64))
+            secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{wrapped_key}\n-----END PRIVATE KEY-----\n"
         
         creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
         client = gspread.authorize(creds)
@@ -183,7 +181,7 @@ with tab1:
                         "quantity": qty_input_new,
                         "status": "Pending"
                     }])
-                    updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else updated_w
+                    updated_w = pd.concat([df_withdrawals, new_w], ignore_index=True) if not df_withdrawals.empty else new_w
                     update_worksheet("Αποσύρσεις", updated_w)
                     
                     st.success("Αποθηκεύτηκε επιτυχώς!")
