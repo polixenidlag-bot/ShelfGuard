@@ -1,15 +1,8 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import streamlit.components.v1 as components
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
-
-# Έλεγχος αν ήρθε κωδικός από την κάμερα μέσω ανανέωσης
-if "scanned" in st.query_params:
-    st.session_state.scanned_barcode = st.query_params["scanned"]
-    st.query_params.clear()
-    st.rerun()
 
 st.title("🧊 ShelfGuard")
 st.write("ΣΥΣΤΗΜΑ ΑΣΦΑΛΟΥΣ ΕΛΕΓΧΟΥ ΗΜΕΡΟΜΗΝΙΩΝ ΚΑΙ ΑΠΟΣΥΡΣΕΩΝ")
@@ -22,9 +15,6 @@ if "withdrawals_db" not in st.session_state:
     st.session_state.withdrawals_db = pd.DataFrame(columns=[
         "department", "barcode", "product_name", "expiry_date", "withdrawal_date", "quantity", "status"
     ])
-
-if "scanned_barcode" not in st.session_state:
-    st.session_state.scanned_barcode = ""
 
 tab1, tab2 = st.tabs(["📋 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
@@ -41,34 +31,6 @@ if "list_filter" not in st.session_state:
 
 df_products = st.session_state.products_db
 df_withdrawals = st.session_state.withdrawals_db
-
-# Συνάρτηση κάμερας που περνάει τον κωδικό με ασφάλεια στην εφαρμογή
-def render_camera_scanner(scanner_id):
-    components.html(f"""
-        <div style="text-align: center; background: #1e1e1e; padding: 12px; border-radius: 8px;">
-            <div id="reader_{scanner_id}" style="width:100%; max-width:300px; margin:auto;"></div>
-            <button id="btn_{scanner_id}" onclick="startCam_{scanner_id}()" style="margin-top:10px; padding:10px 20px; background:#ff4b4b; color:white; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px;">📸 Άνοιγμα Κάμερας</button>
-        </div>
-        <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-        <script>
-            function startCam_{scanner_id}() {{
-                document.getElementById('btn_{scanner_id}').style.display = 'none';
-                const scanner = new Html5Qrcode("reader_{scanner_id}");
-                scanner.start(
-                    {{ facingMode: "environment" }},
-                    {{ fps: 10, qrbox: {{ width: 250, height: 110 }} }},
-                    (decodedText) => {{
-                        scanner.stop().catch(err => {{}});
-                        window.parent.location.search = "?scanned=" + encodeURIComponent(decodedText);
-                    }},
-                    (err) => {{}}
-                ).catch(err => {{
-                    alert("Δεν ήταν δυνατή η πρόσβαση στην κάμερα.");
-                    document.getElementById('btn_{scanner_id}').style.display = 'block';
-                }});
-            }}
-        </script>
-    """, height=260)
 
 with tab1:
     selected_dept = st.selectbox("📍 Επιλέξτε Τμήμα / Ψυγείο:", DEPARTMENTS, key="dept_tab1")
@@ -100,21 +62,10 @@ with tab1:
     st.divider()
     st.subheader("📦 Καταχώρηση Προϊόντος")
     
-    with st.expander("📷 Κουμπί Σαρωτή Κάμερας"):
-        render_camera_scanner("tab1")
-
-    # Το πεδίο παίρνει αυτόματα τον κωδικό από τη σάρωση
-    active_code = st.text_input(
-        "Barcode Προϊόντος:", 
-        value=st.session_state.scanned_barcode, 
-        key="manual_bc_tab1", 
-        placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
-    )
+    # Γρήγορο, καθαρό πεδίο barcode για κινητά και πληκτρολόγια
+    active_code = st.text_input("📷 Barcode Προϊόντος:", key="manual_bc_tab1", placeholder="Πατήστε εδώ για σάρωση ή πληκτρολόγηση...")
 
     if active_code:
-        # Συγχρονισμός state
-        st.session_state.scanned_barcode = active_code
-        
         product_row = None
         if not df_products.empty and 'barcode' in df_products.columns:
             match = df_products[df_products['barcode'].astype(str) == str(active_code)]
@@ -141,7 +92,6 @@ with tab1:
                     "status": "Pending"
                 }])
                 st.session_state.withdrawals_db = pd.concat([st.session_state.withdrawals_db, new_row], ignore_index=True)
-                st.session_state.scanned_barcode = "" # Καθαρισμός μετά την προσθήκη
                 st.success("Προστέθηκε επιτυχώς!")
                 st.rerun()
                 
@@ -173,7 +123,6 @@ with tab1:
                         "status": "Pending"
                     }])
                     st.session_state.withdrawals_db = pd.concat([st.session_state.withdrawals_db, new_w], ignore_index=True)
-                    st.session_state.scanned_barcode = ""
                     
                     st.success("Αποθηκεύτηκε επιτυχώς!")
                     st.rerun()
@@ -249,19 +198,9 @@ with tab1:
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
     
-    with st.expander("📷 Κουμπί Σαρωτή Κάμερας"):
-        render_camera_scanner("tab2")
-
-    db_barcode = st.text_input(
-        "Barcode Νέου Προϊόντος:", 
-        value=st.session_state.scanned_barcode, 
-        key="db_manual_bc", 
-        placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
-    )
+    # Γρήγορο πεδίο barcode και στη 2η καρτέλα
+    db_barcode = st.text_input("📷 Barcode Νέου Προϊόντος:", key="db_manual_bc", placeholder="Πατήστε εδώ για σάρωση ή πληκτρολόγηση...")
     
-    if db_barcode:
-        st.session_state.scanned_barcode = db_barcode
-
     db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input")
     db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
     db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
@@ -275,7 +214,6 @@ with tab2:
                 "department": db_dept
             }])
             st.session_state.products_db = pd.concat([st.session_state.products_db, new_prod], ignore_index=True)
-            st.session_state.scanned_barcode = ""
             st.success("Αποθηκεύτηκε επιτυχώς!")
             st.rerun()
         else:
