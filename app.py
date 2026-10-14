@@ -95,17 +95,18 @@ with tab1:
     st.divider()
     st.subheader("📦 Καταχώρηση Προϊόντος")
     
-    # Διακόπτης (Toggle) για άνοιγμα κάμερας
-    cam_toggle_1 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_1")
-    if cam_toggle_1:
-        render_camera_scanner("tab1")
-
+    # 1. Πρώτα το πεδίο κειμένου
     active_code = st.text_input(
         "Barcode Προϊόντος:", 
         value=st.session_state.scanned_barcode, 
         key="manual_bc_tab1", 
         placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
     )
+
+    # 2. Έπειτα ο διακόπτης και η κάμερα από κάτω
+    cam_toggle_1 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_1")
+    if cam_toggle_1:
+        render_camera_scanner("tab1")
 
     if active_code:
         st.session_state.scanned_barcode = active_code
@@ -244,11 +245,7 @@ with tab1:
 with tab2:
     st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
     
-    # Διακόπτης (Toggle) και στη 2η καρτέλα
-    cam_toggle_2 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_2")
-    if cam_toggle_2:
-        render_camera_scanner("tab2")
-
+    # 1. Πρώτα το πεδίο κειμένου στη 2η καρτέλα
     db_barcode = st.text_input(
         "Barcode Νέου Προϊόντος:", 
         value=st.session_state.scanned_barcode, 
@@ -256,6 +253,11 @@ with tab2:
         placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
     )
     
+    # 2. Έπειτα ο διακόπτης και η κάμερα από κάτω
+    cam_toggle_2 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_2")
+    if cam_toggle_2:
+        render_camera_scanner("tab2")
+
     if db_barcode:
         st.session_state.scanned_barcode = db_barcode
 
