@@ -1,27 +1,60 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from streamlit_gsheets import GSheetsConnection
+import gspread
+from google.oauth2.service_account import Credentials
+import textwrap
+
+SCOPE = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
+def get_gsheet_client():
+    try:
+        secrets = st.secrets["connections"]["gsheets"]
+        secrets_dict = dict(secrets)
+        
+        if "private_key" in secrets_dict:
+            raw_key = secrets_dict["private_key"]
+            clean_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+            clean_key = "".join(clean_key.split())
+            wrapped_key = "\n".join(textwrap.wrap(clean_key, 64))
+            secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{wrapped_key}\n-----END PRIVATE KEY-----\n"
+        
+        creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
+        client = gspread.authorize(creds)
+        return client
+    except Exception as e:
+        st.error(f"Σφάλμα σύνδεσης: {e}")
+        return None
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1DQHu9EFzWqKvK5e8E_lAcsnshEa1tskLhFDt5ruHOvY/edit?usp=drivesdk"
 
-# Σύνδεση με το Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
-
 def load_data(worksheet_name):
-    try:
-        df = conn.read(spreadsheet=SHEET_URL, worksheet=worksheet_name, ttl=0)
-        return df.dropna(how="all")
-    except Exception:
-        return pd.DataFrame()
+    client = get_gsheet_client()
+    if client:
+        try:
+            sheet = client.open_by_url(SHEET_URL).worksheet(worksheet_name)
+            data = sheet.get_all_records()
+            return pd.DataFrame(data)
+        except Exception:
+            return pd.DataFrame()
+    return pd.DataFrame()
 
 def update_worksheet(worksheet_name, df):
-    try:
-        conn.update(spreadsheet=SHEET_URL, worksheet=worksheet_name, data=df.fillna(""))
-        return True
-    except Exception as e:
-        st.error(f"Σφάλμα αποθήκευσης: {e}")
-        return False
+    client = get_gsheet_client()
+    if client:
+        try:
+            sheet = client.open_by_url(SHEET_URL).worksheet(worksheet_name)
+            sheet.clear()
+            df_to_save = df.fillna("")
+            sheet.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
+            return True
+        except Exception as e:
+            st.error(f"Σφάλμα αποθήκευσης: {e}")
+            return False
+    return False
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
@@ -74,7 +107,6 @@ with tab1:
     st.divider()
     st.subheader("📦 Καταχώρηση Προϊόντος")
     
-    # Πεδίο barcode: Στο κινητό πατάς το εικονίδιο σάρωσης/κάμερας στο πληκτρολόγιό σου
     active_code = st.text_input("📷 Barcode Προϊόντος (Σκανάρετε με το πληκτρολόγιο ή πληκτρολογήστε):", key="manual_bc_tab1", placeholder="Πατήστε εδώ και σκανάρετε...")
 
     if active_code:
