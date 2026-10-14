@@ -1,69 +1,29 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import gspread
-from google.oauth2.service_account import Credentials
+from streamlit_gsheets import GSheetsConnection
 from streamlit_qrcode_scanner import qrcode_scanner
-import textwrap
-import re
-
-SCOPE = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-
-def get_gsheet_client():
-    try:
-        secrets = st.secrets["connections"]["gsheets"]
-        secrets_dict = dict(secrets)
-        
-        if "private_key" in secrets_dict:
-            raw_key = str(secrets_dict["private_key"])
-            raw_key = raw_key.replace('“', '').replace('”', '').replace('"', '').replace("'", "")
-            clean = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
-            
-            # Καθαρισμός: Κρατάμε ΑΥΣΤΗΡΑ μόνο έγκυρους χαρακτήρες Base64 (διώχνει τελείες, κενά κλπ.)
-            clean = "".join(re.findall(r'[A-Za-z0-9+/]', clean))
-            
-            padding_needed = (4 - len(clean) % 4) % 4
-            clean = clean + '=' * padding_needed
-            
-            wrapped = "\n".join(textwrap.wrap(clean, 64))
-            secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{wrapped}\n-----END PRIVATE KEY-----\n"
-        
-        creds = Credentials.from_service_account_info(secrets_dict, scopes=SCOPE)
-        client = gspread.authorize(creds)
-        return client
-    except Exception as e:
-        st.error(f"Σφάλμα σύνδεσης: {e}")
-        return None
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1DQHu9EFzWqKvK5e8E_lAcsnshEa1tskLhFDt5ruHOvY/edit?usp=drivesdk"
 
+# Σύνδεση με το Google Sheets μέσω Streamlit GSheetsConnection
+conn = st.connection("gsheets", type=GSheetsConnection)
+
 def load_data(worksheet_name):
-    client = get_gsheet_client()
-    if client:
-        try:
-            sheet = client.open_by_url(SHEET_URL).worksheet(worksheet_name)
-            data = sheet.get_all_records()
-            return pd.DataFrame(data)
-        except Exception:
-            return pd.DataFrame()
-    return pd.DataFrame()
+    try:
+        df = conn.read(spreadsheet=SHEET_URL, worksheet=worksheet_name, ttl=0)
+        return df.dropna(how="all")
+    except Exception:
+        return pd.DataFrame()
 
 def update_worksheet(worksheet_name, df):
-    client = get_gsheet_client()
-    if client:
-        try:
-            sheet = client.open_by_url(SHEET_URL).worksheet(worksheet_name)
-            sheet.clear()
-            df_to_save = df.fillna("")
-            sheet.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
-            return True
-        except Exception as e:
-            st.error(f"Σφάλμα αποθήκευσης: {e}")
-            return False
-    return False
+    try:
+        # Ενημέρωση του φύλλου
+        conn.update(spreadsheet=SHEET_URL, worksheet=worksheet_name, data=df.fillna(""))
+        return True
+    except Exception as e:
+        st.error(f"Σφάλμα αποθήκευσης: {e}")
+        return False
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
@@ -103,12 +63,12 @@ with tab1:
 
     m1, m2 = st.columns(2)
     with m1:
-        st.metric("Σημερινές Αποσύρσεις", count_today)
+        st.metric("🚨 Σημερινές Αποσύρσεις", count_today)
         if st.button("🔍 Φίλτρο: Σημερινά", key="btn_f_today", use_container_width=True):
             st.session_state.list_filter = "today"
             st.rerun()
     with m2:
-        st.metric("Εκκρεμείς Αποσύρσεις", count_total_pending)
+        st.metric("⏳ Εκκρεμείς Αποσύρσεις", count_total_pending)
         if st.button("🔍 Φίλτρο: Εκκρεμείς", key="btn_f_pend", use_container_width=True):
             st.session_state.list_filter = "pending_all"
             st.rerun()
@@ -169,7 +129,7 @@ with tab1:
             if st.button("💾 Αποθήκευση Προϊόντος & Καταχώρηση", key="save_new_btn", use_container_width=True):
                 if new_name:
                     new_prod = pd.DataFrame([{
-                        "barcode": str(active_code),
+                        "barcode": str(db_barcode),
                         "name": new_name,
                         "rule_days": new_rule,
                         "department": selected_dept
@@ -204,14 +164,14 @@ with tab1:
     with col_fbtn:
         filter_mode = st.radio(
             "Προβολή:",
-            ["Εκκρεμείς", "Σημερινά", "Όλα"],
+            ["⏳ Εκκρεμείς", "🚨 Σημερινά", "📂 Όλα"],
             index=0 if st.session_state.list_filter == "pending_all" else (1 if st.session_state.list_filter == "today" else 2),
             horizontal=True,
             key="radio_filter_mode"
         )
-        if filter_mode == "Εκκρεμείς":
+        if filter_mode == "⏳ Εκκρεμείς":
             st.session_state.list_filter = "pending_all"
-        elif filter_mode == "Σημερινά":
+        elif filter_mode == "🚨 Σημερινά":
             st.session_state.list_filter = "today"
         else:
             st.session_state.list_filter = "history"
