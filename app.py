@@ -5,7 +5,7 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
-# Έλεγχος αν ήρθε κωδικός από την κάμερα και άμεση αποθήκευση στη μνήμη
+# Έλεγχος αν ήρθε κωδικός από την κάμερα μέσω αυτόματης ανανέωσης
 if "scanned" in st.query_params:
     scanned_val = st.query_params["scanned"]
     st.query_params.clear()
@@ -41,18 +41,18 @@ if "list_filter" not in st.session_state:
 df_products = st.session_state.products_db
 df_withdrawals = st.session_state.withdrawals_db
 
-# Συνάρτηση σαρωτή κάμερας
+# Διόρθωση μεγέθους πλαισίου (qrbox πιο φαρδύ για barcode)
 def render_camera_scanner(scanner_id):
     components.html(f"""
-        <div style="text-align: center; background: #1e1e1e; padding: 10px; border-radius: 8px;">
-            <div id="reader_{scanner_id}" style="width:100%; max-width:280px; margin:auto;"></div>
+        <div style="text-align: center; background: #1e1e1e; padding: 8px; border-radius: 8px;">
+            <div id="reader_{scanner_id}" style="width:100%; max-width:320px; margin:auto;"></div>
         </div>
         <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
         <script>
             let html5QrCode_{scanner_id} = new Html5Qrcode("reader_{scanner_id}");
             html5QrCode_{scanner_id}.start(
                 {{ facingMode: "environment" }},
-                {{ fps: 10, qrbox: {{ width: 220, height: 100 }} }},
+                {{ fps: 15, qrbox: {{ width: 280, height: 90 }} }},
                 (decodedText) => {{
                     html5QrCode_{scanner_id}.stop().catch(err => {{}});
                     window.parent.location.search = "?scanned=" + encodeURIComponent(decodedText);
@@ -62,7 +62,7 @@ def render_camera_scanner(scanner_id):
                 console.log(err);
             }});
         </script>
-    """, height=220)
+    """, height=260)
 
 with tab1:
     selected_dept = st.selectbox("📍 Επιλέξτε Τμήμα / Ψυγείο:", DEPARTMENTS, key="dept_tab1")
@@ -101,7 +101,7 @@ with tab1:
         placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
     )
 
-    # 2. ΜΕΤΑ ο διακόπτης και η κάμερα από κάτω
+    # 2. ΜΕΤΑ ο διακόπτης (toggle) από κάτω
     cam_toggle_1 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_1")
     if cam_toggle_1:
         render_camera_scanner("tab1")
@@ -248,7 +248,7 @@ with tab2:
         placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
     )
     
-    # 2. ΜΕΤΑ ο διακόπτης και η κάμερα από κάτω
+    # 2. ΜΕΤΑ ο διακόπτης (toggle) από κάτω
     cam_toggle_2 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_2")
     if cam_toggle_2:
         render_camera_scanner("tab2")
