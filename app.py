@@ -41,18 +41,18 @@ if "list_filter" not in st.session_state:
 df_products = st.session_state.products_db
 df_withdrawals = st.session_state.withdrawals_db
 
-# Διόρθωση μεγέθους πλαισίου (qrbox πιο φαρδύ για barcode)
+# Διόρθωση ύψους HTML component (height=340) για να χωράει ολόκληρο το πλαίσιο
 def render_camera_scanner(scanner_id):
     components.html(f"""
-        <div style="text-align: center; background: #1e1e1e; padding: 8px; border-radius: 8px;">
-            <div id="reader_{scanner_id}" style="width:100%; max-width:320px; margin:auto;"></div>
+        <div style="text-align: center; background: #1e1e1e; padding: 10px; border-radius: 8px;">
+            <div id="reader_{scanner_id}" style="width:100%; max-width:300px; margin:auto;"></div>
         </div>
         <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
         <script>
             let html5QrCode_{scanner_id} = new Html5Qrcode("reader_{scanner_id}");
             html5QrCode_{scanner_id}.start(
                 {{ facingMode: "environment" }},
-                {{ fps: 15, qrbox: {{ width: 280, height: 90 }} }},
+                {{ fps: 15, qrbox: {{ width: 260, height: 110 }} }},
                 (decodedText) => {{
                     html5QrCode_{scanner_id}.stop().catch(err => {{}});
                     window.parent.location.search = "?scanned=" + encodeURIComponent(decodedText);
@@ -62,7 +62,7 @@ def render_camera_scanner(scanner_id):
                 console.log(err);
             }});
         </script>
-    """, height=260)
+    """, height=340)
 
 with tab1:
     selected_dept = st.selectbox("📍 Επιλέξτε Τμήμα / Ψυγείο:", DEPARTMENTS, key="dept_tab1")
