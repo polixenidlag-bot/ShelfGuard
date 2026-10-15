@@ -5,7 +5,6 @@ from PIL import Image
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
-# Ασφαλής έλεγχος για το pyzbar
 try:
     from pyzbar.pyzbar import decode
     HAS_PYZBAR = True
@@ -15,7 +14,6 @@ except Exception:
 st.title("🧊 ShelfGuard")
 st.write("ΣΥΣΤΗΜΑ ΑΣΦΑΛΟΥΣ ΕΛΕΓΧΟΥ ΗΜΕΡΟΜΗΝΙΩΝ ΚΑΙ ΑΠΟΣΥΡΣΕΩΝ")
 
-# Αρχικοποίηση δεδομένων
 if "products_db" not in st.session_state:
     st.session_state.products_db = pd.DataFrame(columns=["barcode", "name", "rule_days", "department"])
 
@@ -43,15 +41,17 @@ with tab1:
     
     camera_file = st.camera_input("Τραβήξτε φωτογραφία το Barcode", key="cam_1")
     
-    scanned_barcode = ""
     if camera_file is not None:
         if HAS_PYZBAR:
             try:
                 img = Image.open(camera_file)
                 decoded_objs = decode(img)
                 if decoded_objs:
-                    scanned_barcode = decoded_objs[0].data.decode('utf-8')
-                    st.success(f"Επιτυχής σάρωση: {scanned_barcode}")
+                    scanned_text = decoded_objs[0].data.decode('utf-8')
+                    # Αποθηκεύουμε απευθείας στο session_state του πεδίου κειμένου και κάνουμε ανανέωση
+                    st.session_state["bc_input_1"] = scanned_text
+                    st.success(f"Επιτυχής σάρωση: {scanned_text}")
+                    st.rerun()
                 else:
                     st.warning("Δεν εντοπίστηκε barcode. Δοκιμάστε πιο κοντά.")
             except Exception as e:
@@ -59,11 +59,10 @@ with tab1:
         else:
             st.info("Η βιβλιοθήκη pyzbar εγκαθίσταται. Μπορείτε να γράψετε τον κωδικό χειροκίνητα παρακάτω.")
 
-    # Πεδίο κειμένου για τον κωδικό
-    barcode_input = st.text_input("Barcode Προϊόντος:", value=scanned_barcode, key="bc_input_1", placeholder="Σκαναρίστε ή πληκτρολογήστε...")
+    # Πεδίο κειμένου που διαβάζει απευθείας από τη μνήμη
+    barcode_input = st.text_input("Barcode Προϊόντος:", key="bc_input_1", placeholder="Σκαναρίστε ή πληκτρολογήστε...")
 
     if barcode_input:
-        # Έλεγχος αν υπάρχει το προϊόν στη βάση προϊόντων
         prod_match = None
         df_p = st.session_state.products_db
         if not df_p.empty and 'barcode' in df_p.columns:
@@ -102,7 +101,6 @@ with tab1:
             
             if st.button("💾 Αποθήκευση & Καταχώρηση", use_container_width=True, key="save_new_p"):
                 if new_name:
-                    # Προσθήκη στη βάση προϊόντων
                     new_prod = pd.DataFrame([{
                         "barcode": str(barcode_input),
                         "name": new_name,
@@ -111,7 +109,6 @@ with tab1:
                     }])
                     st.session_state.products_db = pd.concat([st.session_state.products_db, new_prod], ignore_index=True)
                     
-                    # Προσθήκη στις αποσύρσεις
                     w_date = exp_date - timedelta(days=new_rule)
                     new_w = pd.DataFrame([{
                         "department": selected_dept,
@@ -128,22 +125,22 @@ with tab1:
                 else:
                     st.error("Βάλτε όνομα προϊόντος.")
 
-    st.divider()
-    st.subheader(f"📋 Εκκρεμείς Αποσύρσεις - {selected_dept}")
-    df_w = st.session_state.withdrawals_db
-    if not df_w.empty and 'department' in df_w.columns:
-        dept_pending = df_w[(df_w['department'] == selected_dept) & (df_w['status'] == 'Pending')]
-        if not dept_pending.empty:
-            for idx, row in dept_pending.iterrows():
-                st.write(f"**{row['product_name']}** ({row['quantity']} τεμ.) | Λήξη: {row['expiry_date']}")
-                if st.button("✔️ Ολοκλήρωση", key=f"done_{idx}"):
-                    st.session_state.withdrawals_db.loc[idx, 'status'] = 'Done'
-                    st.rerun()
-                st.divider()
+        st.divider()
+        st.subheader(f"📋 Εκκρεμείς Αποσύρσεις - {selected_dept}")
+        df_w = st.session_state.withdrawals_db
+        if not df_w.empty and 'department' in df_w.columns:
+            dept_pending = df_w[(df_w['department'] == selected_dept) & (df_w['status'] == 'Pending')]
+            if not dept_pending.empty:
+                for idx, row in dept_pending.iterrows():
+                    st.write(f"**{row['product_name']}** ({row['quantity']} τεμ.) | Λήξη: {row['expiry_date']}")
+                    if st.button("✔️ Ολοκλήρωση", key=f"done_{idx}"):
+                        st.session_state.withdrawals_db.loc[idx, 'status'] = 'Done'
+                        st.rerun()
+                    st.divider()
+            else:
+                st.info("Δεν υπάρχουν εκκρεμείς αποσύρσεις για αυτό το τμήμα.")
         else:
-            st.info("Δεν υπάρχουν εκκρεμείς αποσύρσεις για αυτό το τμήμα.")
-    else:
-        st.info("Δεν υπάρχουν καταχωρήσεις ακόμα.")
+            st.info("Δεν υπάρχουν καταχωρήσεις ακόμα.")
 
 with tab2:
     st.subheader("📦 Διαχείριση Προϊόντων Βάσης")
