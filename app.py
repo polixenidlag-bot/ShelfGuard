@@ -1,7 +1,14 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import streamlit.components.v1 as components
+from PIL import Image
+
+# Προσπάθεια εισαγωγής βιβλιοθήκης ανάγνωσης barcode από φωτογραφία
+try:
+    from pyzbar.pyzbar import decode
+    HAS_PYZBAR = True
+except ImportError:
+    HAS_PYZBAR = False
 
 st.set_page_config(page_title="ShelfGuard", page_icon="🧊", layout="centered")
 
@@ -17,8 +24,8 @@ if "withdrawals_db" not in st.session_state:
         "department", "barcode", "product_name", "expiry_date", "withdrawal_date", "quantity", "status"
     ])
 
-if "scanned_barcode_val" not in st.session_state:
-    st.session_state.scanned_barcode_val = ""
+if "scanned_code" not in st.session_state:
+    st.session_state.scanned_code = ""
 
 tab1, tab2 = st.tabs(["📋 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
@@ -35,31 +42,6 @@ if "list_filter" not in st.session_state:
 
 df_products = st.session_state.products_db
 df_withdrawals = st.session_state.withdrawals_db
-
-# Σαρωτής κάμερας με LocalStorage bridge για άμεση μεταφορά του κωδικού
-def render_camera_scanner(scanner_id):
-    components.html(f"""
-        <div style="text-align: center; background: #1e1e1e; padding: 10px; border-radius: 8px;">
-            <div id="reader_{scanner_id}" style="width:100%; max-width:300px; margin:auto;"></div>
-        </div>
-        <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-        <script>
-            let html5QrCode_{scanner_id} = new Html5Qrcode("reader_{scanner_id}");
-            html5QrCode_{scanner_id}.start(
-                {{ facingMode: "environment" }},
-                {{ fps: 15, qrbox: {{ width: 260, height: 110 }} }},
-                (decodedText) => {{
-                    html5QrCode_{scanner_id}.stop().catch(err => {{}});
-                    // Αποθήκευση στη μνήμη του browser και ανανέωση
-                    window.parent.localStorage.setItem("shelfguard_scan", decodedText);
-                    window.parent.location.reload();
-                }},
-                (err) => {{}}
-            ).catch(err => {{
-                console.log(err);
-            }});
-        </script>
-    """, height=340)
 
 with tab1:
     selected_dept = st.selectbox("📍 Επιλέξτε Τμήμα / Ψυγείο:", DEPARTMENTS, key="dept_tab1")
@@ -91,36 +73,33 @@ with tab1:
     st.divider()
     st.subheader("📦 Καταχώρηση Προϊόντος")
     
-    # JavaScript snippet για ανάγνωση του barcode από τη μνήμη και αυτόματη συμπλήρωση
-    components.html("""
-        <script>
-            const saved = window.parent.localStorage.getItem("shelfguard_scan");
-            if (saved) {
-                window.parent.localStorage.removeItem("shelfguard_scan");
-                const docInputs = window.parent.document.querySelectorAll('input[type="text"]');
-                for (let input of docInputs) {
-                    if (input.value !== saved) {
-                        let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, "value").set;
-                        nativeInputValueSetter.call(input, saved);
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        break;
-                    }
-                }
-            }
-        </script>
-    """, height=0)
+    # Έλεγχος αν τραβήχτηκε φωτογραφία από την κάμερα
+    camera_file = st.camera_input("📷 Τραβήξτε φωτογραφία το Barcode", key="cam_input_tab1")
+    
+    if camera_file is not None:
+        if HAS_PYZBAR:
+            try:
+                img = Image.open(camera_file)
+                decoded_objs = decode(img)
+                if decoded_objs:
+                    scanned_text = decoded_objs[0].data.decode('utf-8')
+                    st.session_state.scanned_code = scanned_text
+                    st.success(f"Επιτυχής σάρωση Barcode: {scanned_text}")
+                else:
+                    st.warning("Δεν εντοπίστηκε barcode στη φωτογραφία. Δοκιμάστε ξανά πιο κοντά.")
+            except Exception as e:
+                st.error(f"Σφάλμα ανάγνωσης: {e}")
+        else:
+            st.error("⚠️ Απαιτείται η βιβλιοθήκη `pyzbar` στο `requirements.txt` για την αυτόματη ανάγνωση. (Εναλλακτικά, πληκτρολογήστε τον κωδικό χειροκίνητα παρακάτω).")
 
-    # 1. ΠΡΩΤΑ το πεδίο κειμένου
+    # 1. ΠΡΩΤΑ εμφανίζεται το πεδίο κειμένου (με τιμή από τη σάρωση ή χειροκίνητη)
+    default_val = st.session_state.scanned_code if st.session_state.scanned_code else ""
     active_code = st.text_input(
         "Barcode Προϊόντος:", 
+        value=default_val,
         key="manual_bc_tab1", 
         placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
     )
-
-    # 2. ΜΕΤΑ ο διακόπτης (toggle) από κάτω με το τέλειο τετράγωνο
-    cam_toggle_1 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_1")
-    if cam_toggle_1:
-        render_camera_scanner("tab1")
 
     if active_code:
         product_row = None
@@ -149,6 +128,7 @@ with tab1:
                     "status": "Pending"
                 }])
                 st.session_state.withdrawals_db = pd.concat([st.session_state.withdrawals_db, new_row], ignore_index=True)
+                st.session_state.scanned_code = ""
                 st.success("Προστέθηκε επιτυχώς!")
                 st.rerun()
                 
@@ -180,6 +160,7 @@ with tab1:
                         "status": "Pending"
                     }])
                     st.session_state.withdrawals_db = pd.concat([st.session_state.withdrawals_db, new_w], ignore_index=True)
+                    st.session_state.scanned_code = ""
                     
                     st.success("Αποθηκεύτηκε επιτυχώς!")
                     st.rerun()
@@ -200,94 +181,3 @@ with tab1:
             horizontal=True,
             key="radio_filter_mode"
         )
-        if filter_mode == "⏳ Εκκρεμείς":
-            st.session_state.list_filter = "pending_all"
-        elif filter_mode == "🚨 Σημερινά":
-            st.session_state.list_filter = "today"
-        else:
-            st.session_state.list_filter = "history"
-
-    current_dept_w = pd.DataFrame()
-    df_w_current = st.session_state.withdrawals_db
-    if not df_w_current.empty and 'department' in df_w_current.columns:
-        current_dept_w = df_w_current[df_w_current['department'] == selected_dept].copy()
-
-        if st.session_state.list_filter == "today":
-            today_str = today_metric_date.strftime("%Y-%m-%d")
-            current_dept_w = current_dept_w[(current_dept_w['status'] == 'Pending') & (current_dept_w['withdrawal_date'].astype(str).str.startswith(today_str))]
-        elif st.session_state.list_filter == "pending_all":
-            current_dept_w = current_dept_w[current_dept_w['status'] == 'Pending']
-        
-        if search_query:
-            current_dept_w = current_dept_w[
-                current_dept_w['product_name'].str.contains(search_query, case=False, na=False) |
-                current_dept_w['barcode'].astype(str).str.contains(search_query, case=False, na=False)
-            ]
-
-    if not current_dept_w.empty:
-        for idx, row in current_dept_w.iterrows():
-            try:
-                w_date = datetime.strptime(str(row['withdrawal_date'])[:10], "%Y-%m-%d").date()
-                exp_date = datetime.strptime(str(row['expiry_date'])[:10], "%Y-%m-%d").date()
-            except:
-                continue
-            
-            qty = row['quantity'] if pd.notnull(row['quantity']) else 1
-            status = row['status']
-            
-            with st.container():
-                st.write(f"**{row['product_name']}** ({qty} τεμ.) — Barcode: `{row['barcode']}`")
-                st.write(f"🗓️ Λήξη: {exp_date.strftime('%d/%m/%Y')} | ⏰ Απόσυρση: {w_date.strftime('%d/%m/%Y')}")
-                st.write(f"Κατάσταση: {status}")
-                
-                if status == 'Pending':
-                    if st.button("✔️ Ολοκλήρωση", key=f"done_{idx}"):
-                        st.session_state.withdrawals_db.loc[idx, 'status'] = 'Done'
-                        st.rerun()
-                else:
-                    if st.button("↩️ Επαναφορά", key=f"undo_{idx}"):
-                        st.session_state.withdrawals_db.loc[idx, 'status'] = 'Pending'
-                        st.rerun()
-                st.divider()
-    else:
-        st.info("Δεν βρέθηκαν προϊόντα.")
-
-with tab2:
-    st.subheader("📦 Προσθήκη Προϊόντος στη Βάση")
-    
-    # 1. ΠΡΩΤΑ το πεδίο κειμένου στη 2η καρτέλα
-    db_barcode = st.text_input(
-        "Barcode Νέου Προϊόντος:", 
-        key="db_manual_bc", 
-        placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
-    )
-    
-    # 2. ΜΕΤΑ ο διακόπτης (toggle) από κάτω
-    cam_toggle_2 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_2")
-    if cam_toggle_2:
-        render_camera_scanner("tab2")
-
-    db_name = st.text_input("Όνομα Προϊόντος:", key="db_name_input")
-    db_rule = st.number_input("Ημέρες Κανόνα (Πριν τη Λήξη):", min_value=1, max_value=365, value=7, key="db_rule_input")
-    db_dept = st.selectbox("Τμήμα:", DEPARTMENTS, key="db_dept_input")
-    
-    if st.button("💾 Αποθήκευση Προϊόντος", key="save_db_only_btn", use_container_width=True):
-        if db_barcode and db_name:
-            new_prod = pd.DataFrame([{
-                "barcode": str(db_barcode),
-                "name": db_name,
-                "rule_days": db_rule,
-                "department": db_dept
-            }])
-            st.session_state.products_db = pd.concat([st.session_state.products_db, new_prod], ignore_index=True)
-            st.success("Αποθηκεύτηκε επιτυχώς!")
-            st.rerun()
-        else:
-            st.error("Συμπληρώστε barcode και όνομα.")
-
-    st.divider()
-    st.subheader("📋 Λίστα Αποθηκευμένων Προϊόντων")
-    if not st.session_state.products_db.empty:
-        st.dataframe(st.session_state.products_db, use_container_width=True)
-    else:
-        st.info("Δεν υπάρχουν προϊόντα ακόμα.")
