@@ -17,8 +17,8 @@ if "withdrawals_db" not in st.session_state:
         "department", "barcode", "product_name", "expiry_date", "withdrawal_date", "quantity", "status"
     ])
 
-if "scanned_barcode_input" not in st.session_state:
-    st.session_state.scanned_barcode_input = ""
+if "scanned_barcode_val" not in st.session_state:
+    st.session_state.scanned_barcode_val = ""
 
 tab1, tab2 = st.tabs(["📋 Σάρωση & Αποσύρσεις", "📦 Λίστα Προϊόντων"])
 
@@ -36,12 +36,11 @@ if "list_filter" not in st.session_state:
 df_products = st.session_state.products_db
 df_withdrawals = st.session_state.withdrawals_db
 
-# Σταθερός και ασφαλής σαρωτής κάμερας με άμεση επικοινωνία
+# Σαρωτής κάμερας με LocalStorage bridge για άμεση μεταφορά του κωδικού
 def render_camera_scanner(scanner_id):
     components.html(f"""
         <div style="text-align: center; background: #1e1e1e; padding: 10px; border-radius: 8px;">
             <div id="reader_{scanner_id}" style="width:100%; max-width:300px; margin:auto;"></div>
-            <input type="text" id="result_{scanner_id}" style="opacity: 0; position: absolute;" />
         </div>
         <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
         <script>
@@ -51,8 +50,9 @@ def render_camera_scanner(scanner_id):
                 {{ fps: 15, qrbox: {{ width: 260, height: 110 }} }},
                 (decodedText) => {{
                     html5QrCode_{scanner_id}.stop().catch(err => {{}});
-                    // Στέλνει τον κωδικό απευθείας στο parent window του Streamlit
-                    window.parent.postMessage({{ type: 'streamlit:setComponentValue', value: decodedText }}, '*');
+                    // Αποθήκευση στη μνήμη του browser και ανανέωση
+                    window.parent.localStorage.setItem("shelfguard_scan", decodedText);
+                    window.parent.location.reload();
                 }},
                 (err) => {{}}
             ).catch(err => {{
@@ -91,21 +91,38 @@ with tab1:
     st.divider()
     st.subheader("📦 Καταχώρηση Προϊόντος")
     
+    # JavaScript snippet για ανάγνωση του barcode από τη μνήμη και αυτόματη συμπλήρωση
+    components.html("""
+        <script>
+            const saved = window.parent.localStorage.getItem("shelfguard_scan");
+            if (saved) {
+                window.parent.localStorage.removeItem("shelfguard_scan");
+                const docInputs = window.parent.document.querySelectorAll('input[type="text"]');
+                for (let input of docInputs) {
+                    if (input.value !== saved) {
+                        let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, "value").set;
+                        nativeInputValueSetter.call(input, saved);
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        break;
+                    }
+                }
+            }
+        </script>
+    """, height=0)
+
     # 1. ΠΡΩΤΑ το πεδίο κειμένου
     active_code = st.text_input(
         "Barcode Προϊόντος:", 
-        value=st.session_state.scanned_barcode_input,
         key="manual_bc_tab1", 
         placeholder="Σκαναρίστε με την κάμερα ή πληκτρολογήστε..."
     )
 
-    # 2. ΜΕΤΑ ο διακόπτης (toggle) από κάτω
+    # 2. ΜΕΤΑ ο διακόπτης (toggle) από κάτω με το τέλειο τετράγωνο
     cam_toggle_1 = st.toggle("📷 Ενεργοποίηση Κάμερας Σαρωτή", key="toggle_cam_1")
     if cam_toggle_1:
         render_camera_scanner("tab1")
 
     if active_code:
-        st.session_state.scanned_barcode_input = active_code
         product_row = None
         if not df_products.empty and 'barcode' in df_products.columns:
             match = df_products[df_products['barcode'].astype(str) == str(active_code)]
@@ -132,7 +149,6 @@ with tab1:
                     "status": "Pending"
                 }])
                 st.session_state.withdrawals_db = pd.concat([st.session_state.withdrawals_db, new_row], ignore_index=True)
-                st.session_state.scanned_barcode_input = ""
                 st.success("Προστέθηκε επιτυχώς!")
                 st.rerun()
                 
@@ -164,7 +180,6 @@ with tab1:
                         "status": "Pending"
                     }])
                     st.session_state.withdrawals_db = pd.concat([st.session_state.withdrawals_db, new_w], ignore_index=True)
-                    st.session_state.scanned_barcode_input = ""
                     
                     st.success("Αποθηκεύτηκε επιτυχώς!")
                     st.rerun()
